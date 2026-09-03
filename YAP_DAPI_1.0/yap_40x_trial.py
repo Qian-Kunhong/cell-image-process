@@ -23,6 +23,9 @@ from PIL import Image
 from skimage.measure import regionprops
 from skimage.segmentation import expand_labels, find_boundaries
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from summarize_group_differences import build_descriptive_tables
+
 
 DEFAULT_DATA_ROOT = Path(r"E:\Kino-oka Lab\Immunostaining Data_Ekin\2307YapLocalizationImmuno")
 DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent / "outputs" / "all_40x_trial"
@@ -986,6 +989,8 @@ def run(args: argparse.Namespace) -> None:
         save_yap_ratio_overlay(item, mask_paths[item.image_id], result_df, yap_overlay_dir / f"{item.image_id}_yap_ratio.png")
 
     result_df.to_csv(tables_dir / "model_a_single_cell_results.csv", index=False, encoding="utf-8-sig")
+    for table_name, table in build_descriptive_tables(result_df).items():
+        table.to_csv(tables_dir / f"{table_name}.csv", index=False, encoding="utf-8-sig")
     valid_yap = int(result_df["posthoc_yap_ratio_valid"].fillna(False).sum())
     verification = {
         "yap_excluded_from_model_features": not any("yap" in column.lower() or "af488" in column.lower() for column in feature_columns),

@@ -84,3 +84,14 @@ Key within-group figures are
 `umap_posthoc_seeding_density_within_ha_group.png`,
 `phenotype_composition_by_ha_group_and_seeding_density.png`, and
 `yap_localization_by_ha_group_and_seeding_density.png`.
+
+## 可直接比较组别差距的统计表
+
+每次运行会自动生成：
+
+- `field_descriptive_statistics.csv`：每个倍率 × HA 组 × 接种密度单视野的中位数、四分位数、均值和标准差；
+- `same_density_group_contrasts.csv`：相同接种密度下 HA1−Ctrl、HA2−Ctrl、HA2−HA1 的中位数差和相对变化百分比；
+- `phenotype_composition.csv`：各单视野 phenotype 细胞比例；
+- `same_density_phenotype_composition_contrasts.csv`：相同密度下 phenotype 比例的组间百分点差。
+
+这些是单视野描述统计，不提供 p 值，也不把单细胞当作生物学重复。HA1 与 HA2 的差异仍是“处理方案差异”，不能拆成单独时间效应或浓度效应。
