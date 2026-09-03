@@ -97,3 +97,13 @@ Key within-group figures are
 - `same_density_phenotype_composition_contrasts.csv`：相同密度下 phenotype 比例的组间百分点差。
 
 这些是单视野描述统计，不提供 p 值，也不把单细胞当作生物学重复。HA1 与 HA2 的差异仍是“处理方案差异”，不能拆成单独时间效应或浓度效应。
+
+## 表型图与边界 QC
+
+表型图分成灰度 DAPI 定位图和不透明纯色 mask 图。右图颜色直接对应整套模型图例，数字为 phenotype 编号；左图黑描边白叉表示 `Pmax < 0.80`，不是另一个表型。
+
+直接接触图像第一/最后一行或一列的分割核会被标记为 `touches_border`。旧规则漏掉了 Ctrl_5_40 图中标签 222/223 这两个离底边仅 1 像素的截断轮廓。现在默认 `--edge-buffer-px 2`，仅保留 bbox 距四边最小距离大于 2 像素的核，安全带内对象记录为 `within_2px_image_edge`。这是明确记录的保守边缘容差，不是经验证的完整性分类器，也不是凭肉眼估计“露出几分之几”。距离安全带更远的分割错误仍需另行 QC。
+
+绘图会额外导出 `segmentation/masks_qc_keep/`，只保留最终结果中的核，标签 ID 不重排。原始 `segmentation/masks/` 不变，核周环测量仍使用完整分割来避免把已排除核误当成背景/可用核周区域。重新运行主流程时，QC 在邻域特征之前执行，截断核不再向完整核提供邻域形态值；因此需重拟合 GMM，旧 phenotype 编号不可与新结果直接等同。kNN 邻域在视野边缘仍有截断偏差，此修改不等于完全的空间边界校正。
+
+只重画已有结果可运行 `replot_phenotypes.py --output-root <结果目录>`。旧图保存在 `figures/phenotype_overlays_before_display_fix/`；`tables/phenotype_display_audit.json` 记录原始 mask 和单细胞结果的 SHA256 不变校验。

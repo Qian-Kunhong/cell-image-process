@@ -25,6 +25,7 @@ from skimage.segmentation import expand_labels, find_boundaries
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize_group_differences import build_descriptive_tables
+from phenotype_display import save_clear_phenotypes
 
 
 DEFAULT_DATA_ROOT = Path(r"E:\Kino-oka Lab\Immunostaining Data_Ekin\2307YapLocalizationImmuno")
@@ -114,6 +115,8 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Validation/debug mode: skip visualization-only UMAP and use PCA1/2 as plotting coordinates.",
     )
     parser.add_argument("--feature-set", choices=("baseline", "composite"), default="composite")
+    parser.add_argument("--edge-buffer-px", type=int, default=2,
+                        help="Exclude nuclei whose mask is within this many pixels of the image edge (default: 2).")
     return parser.parse_args(argv)
 
 
@@ -314,7 +317,9 @@ def segment_image_sets(
     return mask_paths
 
 
-def extract_dapi_features(item: YAPImageSet, mask_path: Path) -> pd.DataFrame:
+def extract_dapi_features(item: YAPImageSet, mask_path: Path, edge_buffer_px: int = 2) -> pd.DataFrame:
+    if edge_buffer_px < 0:
+        raise ValueError("edge_buffer_px must be nonnegative")
     dapi = load_gray(item.dapi_org_path)
     mask = np.load(mask_path)
     height, width = dapi.shape
@@ -328,6 +333,7 @@ def extract_dapi_features(item: YAPImageSet, mask_path: Path) -> pd.DataFrame:
         major = float(prop.major_axis_length)
         minor = float(prop.minor_axis_length)
         touches_border = bool(min_row <= 0 or min_col <= 0 or max_row >= height or max_col >= width)
+        edge_gap = int(min(min_row, min_col, height - max_row, width - max_col))
         rows.append(
             {
                 "cell_id": f"{item.image_id}__cell_{int(prop.label):05d}",
@@ -348,6 +354,8 @@ def extract_dapi_features(item: YAPImageSet, mask_path: Path) -> pd.DataFrame:
                 "yap_af488_org_path": str(item.yap_org_path),
                 "merge_image_path": str(item.merge_path),
                 "touches_border": touches_border,
+                "image_edge_gap_px": edge_gap,
+                "edge_buffer_px": edge_buffer_px,
                 "area_px": area,
                 "perimeter_px": perimeter,
                 "equivalent_diameter_px": float(prop.equivalent_diameter_area),
@@ -368,19 +376,27 @@ def extract_dapi_features(item: YAPImageSet, mask_path: Path) -> pd.DataFrame:
     frame = pd.DataFrame(rows)
     if frame.empty:
         return frame
-    frame = CORE.add_spatial_features(frame)
-    frame = CORE.add_composite_features(frame)
-    frame["qc_keep"] = ~frame["touches_border"]
-    frame["qc_reason"] = np.where(frame["touches_border"], "touches_border", "keep")
+    frame["qc_keep"] = frame["image_edge_gap_px"] > edge_buffer_px
+    frame["qc_reason"] = np.where(
+        frame["touches_border"], "touches_border",
+        np.where(frame["qc_keep"], "keep", f"within_{edge_buffer_px}px_image_edge"),
+    )
+    # Incomplete nuclei must not supply area/shape values to neighbors either.
+    # Raw masks remain in use as occupancy exclusions for YAP ring sampling.
+    kept = frame.loc[frame["qc_keep"]].reset_index(drop=True)
+    if not kept.empty:
+        kept = CORE.add_composite_features(CORE.add_spatial_features(kept))
+        for column in kept.columns.difference(frame.columns):
+            frame[column] = frame["label"].map(kept.set_index("label")[column])
     return frame
 
 
 def extract_all_dapi_features(
-    image_sets: list[YAPImageSet], mask_paths: dict[str, Path]
+    image_sets: list[YAPImageSet], mask_paths: dict[str, Path], edge_buffer_px: int = 2
 ) -> pd.DataFrame:
     tables = []
     for item in image_sets:
-        frame = extract_dapi_features(item, mask_paths[item.image_id])
+        frame = extract_dapi_features(item, mask_paths[item.image_id], edge_buffer_px=edge_buffer_px)
         tables.append(frame)
         print(
             f"[features] {item.image_id}: total={len(frame)}, "
@@ -510,46 +526,17 @@ def save_phenotype_overlay(
     item: YAPImageSet, mask_path: Path, result_df: pd.DataFrame, path: Path
 ) -> None:
     mask = np.load(mask_path)
-    base = np.asarray(Image.open(item.merge_path).convert("RGB"), dtype=np.uint8)
     sub = result_df[result_df["image_id"].eq(item.image_id)]
-    colors = phenotype_colors(sub["dominant_phenotype"])
-    rank_map = np.zeros(int(mask.max()) + 1, dtype=np.int16)
-    names: dict[int, str] = {}
-    for row in sub.itertuples(index=False):
-        rank_map[int(row.label)] = int(row.dominant_phenotype_rank)
-        names[int(row.dominant_phenotype_rank)] = str(row.dominant_phenotype)
-    phenotype_map = rank_map[mask]
-    overlay = base.astype(float)
-    for rank, name in names.items():
-        region = phenotype_map == rank
-        color = np.asarray(colors[name][:3]) * 255.0
-        overlay[region] = 0.58 * overlay[region] + 0.42 * color
-    boundary = find_boundaries(mask, mode="inner")
-    for rank, name in names.items():
-        overlay[boundary & (phenotype_map == rank)] = np.asarray(colors[name][:3]) * 255.0
-    overlay[boundary & (mask > 0) & (phenotype_map == 0)] = np.array([220.0, 220.0, 220.0])
-    low = sub[sub["gmm_max_posterior"] < 0.80]
-    fig, ax = plt.subplots(figsize=(12.5, 9.0))
-    ax.imshow(np.clip(overlay, 0, 255).astype(np.uint8))
-    if len(low):
-        ax.scatter(low["centroid_col_px"], low["centroid_row_px"], marker="x", s=20, color="white")
-    handles = []
-    for rank, name in sorted(names.items()):
-        count = int((sub["dominant_phenotype_rank"] == rank).sum())
-        handles.append(Patch(facecolor=colors[name], label=f"{name} (n={count})"))
-    if len(low):
-        handles.append(Line2D([], [], marker="x", color="white", linestyle="None", label=f"max posterior < 0.80 (n={len(low)})"))
-    ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    ax.set_title(
+    # Keep the whole fitted model's palette, including absent components (n=0).
+    colors = phenotype_colors(result_df["dominant_phenotype"])
+    save_clear_phenotypes(
+        load_gray(item.dapi_org_path), mask, sub, colors,
         f"{experimental_group_display(item.experimental_group_label)}, "
-        f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}: dominant morphology phenotype\n"
-        "DAPI-only model; YAP and Merge are display/post-hoc only"
+        f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}: DAPI-only phenotype",
+        path,
+        mask_path.parent.parent / "masks_qc_keep" / f"{item.image_id}_mask_qc_keep.npy",
+        edge_buffer_px=int(sub["edge_buffer_px"].iloc[0]) if "edge_buffer_px" in sub and len(sub) else 0,
     )
-    ax.axis("off")
-    fig.subplots_adjust(right=0.76, top=0.90)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
 
 
 def save_yap_ratio_overlay(
@@ -908,7 +895,7 @@ def run(args: argparse.Namespace) -> None:
 
     mask_paths = segment_image_sets(selected_sets, output_root, use_gpu=not args.cpu, reuse_masks=args.reuse_masks)
     stage("segmentation complete")
-    all_features = extract_all_dapi_features(selected_sets, mask_paths)
+    all_features = extract_all_dapi_features(selected_sets, mask_paths, edge_buffer_px=args.edge_buffer_px)
     all_features.to_csv(tables_dir / "dapi_features_all_cells.csv", index=False, encoding="utf-8-sig")
     qc_summary = (
         all_features.groupby(
@@ -1024,6 +1011,13 @@ def run(args: argparse.Namespace) -> None:
         "data_root": args.data_root.resolve(),
         "output_root": output_root,
         "feature_set": args.feature_set,
+        "edge_qc": {
+            "buffer_px": args.edge_buffer_px,
+            "keep_rule": "minimum mask-bbox distance to image edge > buffer_px",
+            "spatial_context": "QC-kept nuclei only; excluded nuclear morphology is not used by neighbors",
+            "raw_masks_preserved": True,
+            "limitation": "Conservative image-boundary tolerance, not a validated completeness classifier; kNN remains field-of-view censored near edges",
+        },
         "dapi_input": "8-bit grayscale *_DAPI_ORG.png exports",
         "yap_input": "8-bit grayscale *_AF488_ORG.png exports; interpreted as YAP because of dataset identity, pending antibody record",
         "n_complete_image_sets_discovered": len(all_sets),
