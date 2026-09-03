@@ -1,6 +1,6 @@
-# YAP/DAPI Model A 1.0
+# Ekin_DAPI_YAP_2.0
 
-共享 DAPI 复合特征的公式和边界见 `../Hochest_OCT4_1.0/COMPOSITE_FEATURES.md`。运行会同时比较原始模型和复合特征模型，输出 `raw_vs_composite_model_comparison.csv/json`；不会预设复合特征改善结果。
+2.x 为基于生物学相关自适应复合特征的系列；这里的“生物学相关”指形态与邻域代理，不是经过验证的生物学状态标签。共享 DAPI 复合特征的公式和边界见 `../Ekin_DAPI_OCT_1.1/COMPOSITE_FEATURES.md`。运行会同时比较原始模型和复合特征模型，输出 `raw_vs_composite_model_comparison.csv/json`；不会预设复合特征改善结果。
 
 This workflow is intentionally separate from the OCT4/BASC workflow.
 

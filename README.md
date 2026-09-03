@@ -146,8 +146,18 @@ The main goal of this project is to explore how image-derived morphological and 
 
 ## DAPI-only Model A workflows
 
-- `Hochest_OCT4_1.0/`: feeder-free DAPI morphology clustering; OCT4 is used only for post-clustering BASC binary characterization.
-- `YAP_DAPI_1.0/`: DAPI morphology clustering; YAP is used only as a continuous post-clustering nuclear/perinuclear ratio.
-- Composite-feature formulas, units, directions, and proxy interpretations are documented in `Hochest_OCT4_1.0/COMPOSITE_FEATURES.md`.
+- `Ekin_DAPI_OCT_1.0/`: 既有 DAPI 核形态/邻域特征流程，配对 OCT4 强度用于后续对照。
+- `Ekin_DAPI_OCT_1.1/`: feeder-free DAPI Model A；OCT4 仅在聚类后按 BASC 二元表征。
+- `Ekin_DAPI_YAP_2.0/`: DAPI 复合特征 Model A；YAP 仅在聚类后以连续核/核周比值表征。
+- 复合特征公式、量纲、方向和代理解释见 `Ekin_DAPI_OCT_1.1/COMPOSITE_FEATURES.md`。
 
-Both workflows compare raw and augmented feature models, search K=2–12, and retain all GMM posteriors. 20x and 40x are fitted independently; equal phenotype numbers across magnifications do not imply the same phenotype. Experimental group, treatment time/concentration, seeding density, and other metadata never enter the morphology model.
+### 版本命名约定
+
+- **1.x：基于原始特征的基线系列。** 原始特征包含已提取的核形态、强度或邻域统计，不是原始像素。
+- **2.x：基于生物学相关自适应复合特征的系列。** 在原始特征基础上加入无量纲形态/邻域代理，仍保留原始模型作对照；这些代理不等同于细胞周期、多能性或分化标签。
+
+当前实现的例外：1.1 已接入原始/复合特征对照，并默认输出增强模型结果，同时是 2.0 的共享核心。因此版本号表示系列来源，不能严格用来判定是否仅采用原始特征。本次重命名没有改变算法或重算结果。
+
+原目录 `double_work_build`、`Hochest_OCT4_1.0`、`YAP_DAPI_1.0` 已分别更名为以上三个目录。既有输出和掩膜随目录保留；旧 `run_info.json` 中的绝对路径属于历史运行记录，未改写。
+
+The 1.1 and 2.0 Model A workflows compare raw and augmented feature models, search K=2–12, and retain all GMM posteriors. 20x and 40x are fitted independently; equal phenotype numbers across magnifications do not imply the same phenotype. Experimental group, treatment time/concentration, seeding density, and other metadata never enter the morphology model.

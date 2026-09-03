@@ -63,8 +63,7 @@ SEEDING_DENSITY_CELLS_PER_CM2 = {
 def load_model_a_core():
     parent = Path(__file__).resolve().parent.parent
     candidates = [
-        parent / "Hochest_OCT4_1.0" / "day2_trial.py",
-        parent / "feeder_free_model_a" / "day2_trial.py",
+        parent / "Ekin_DAPI_OCT_1.1" / "day2_trial.py",
     ]
     core_path = next((path for path in candidates if path.exists()), None)
     if core_path is None:

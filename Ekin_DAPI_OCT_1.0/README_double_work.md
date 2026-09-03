@@ -1,4 +1,6 @@
-# Double-Staining Workflow
+# Ekin_DAPI_OCT_1.0 — DAPI/OCT4 双染流程
+
+1.x 表示基于原始特征的基线系列。本版本使用既有 DAPI 核形态与邻域特征，未接入 2.x 的新增生物学相关复合特征方案。“原始特征”不等于原始像素，也不意味着没有邻域特征。
 
 This folder contains a DAPI + Oct-4 workflow that is intentionally separated from the original single-stain scripts.
 

@@ -1,4 +1,6 @@
-# Feeder-free Model A trial
+# Ekin_DAPI_OCT_1.1 — Feeder-free Model A
+
+1.x 表示原始特征基线系列。注意：当前 1.1 已扩展为同时比较原始特征与复合特征，并默认用增强模型输出 phenotype；不能把此目录名理解为“只使用原始特征”。本目录也提供 2.0 使用的共享 DAPI 核心。
 
 复合特征的公式、方向、代理解释和限制见 `COMPOSITE_FEATURES.md`。每次运行会额外输出 `raw_vs_composite_model_comparison.csv/json`，并把 K 搜索扩展到 2–12，显式报告上限命中和低置信度比例。
 
