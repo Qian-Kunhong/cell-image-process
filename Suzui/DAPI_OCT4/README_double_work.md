@@ -1,6 +1,6 @@
-# Ekin_DAPI_OCT4/legacy — 旧 DAPI/OCT4 双染流程
+# Suzui/DAPI_OCT4 — DAPI/OCT4 配对染色对照流程
 
-本流程使用既有 DAPI 核形态与邻域特征，不是新版 Model A 的 `baseline` 入口。新版入口在上一级目录。旧算法独立保留，目录名不再携带软件版本。
+本流程属于 Suzui 数据，不属于 Ekin。默认数据根目录为 `F:\Suzui`，配对数据为 `paper_Oct-4` 下的图像；它复用相邻 `../DAPI/` 的特征提取、QC、聚类和推理实现。它不是 Ekin Model A 的 `baseline` 入口，也不采用 Ekin 的 OCT4 BASC 二元表征规则。来源与两条流程的区别见 `../README.md`。
 
 This folder contains a DAPI + Oct-4 workflow that is intentionally separated from the original single-stain scripts.
 

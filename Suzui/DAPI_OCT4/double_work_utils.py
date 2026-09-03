@@ -48,10 +48,12 @@ def load_module_from_path(module_name: str, path: Path):
 
 
 def sibling_single_work_dir(current_file: Path) -> Path:
-    for directory in current_file.resolve().parents:
-        if (directory / "03-1_qc_filter.py").is_file():
-            return directory
-    raise FileNotFoundError("Cannot locate repository legacy single-stain scripts")
+    directory = current_file.resolve().parent.parent / "DAPI"
+    required = ("03_feature_extractior.py", "03-1_qc_filter.py",
+                "04_unsupervised_learning.py", "05_distinguish cell type.py")
+    if all((directory / name).is_file() for name in required):
+        return directory
+    raise FileNotFoundError(f"Cannot locate Suzui DAPI core scripts: {directory}")
 
 
 def strip_mask_suffix(stem: str) -> str:

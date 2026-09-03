@@ -1,6 +1,6 @@
 # Ekin_DAPI_OCT4 — Feeder-free Model A
 
-目录名只表示来源与通道，不再以 1.x/2.x 表示特征类型。PyCharm 中直接运行 `run_baseline.py` 或 `run_composite.py`，分别输出基线或增强模型；两者仍计算对照指标。公共实现位于 `../shared/dapi_model_a.py`，旧双染流程在 `legacy/`。
+目录名只表示来源与通道，不再以 1.x/2.x 表示特征类型。PyCharm 中直接运行 `run_baseline.py` 或 `run_composite.py`，分别输出基线或增强模型；两者仍计算对照指标。公共实现位于 `../shared/dapi_model_a.py`。原 `double_work_build` 属于 Suzui 数据，已归入 `../Suzui/DAPI_OCT4/`，不属于本 Ekin 流程。
 
 入口顶部 `MAGNIFICATION` 默认 `40x`，可改为 `20x`；也可在运行参数中指定 `--fit-magnification 20x`、`--data-root`、`--culture-day`、`--sample`、`--reuse-masks`。默认输出为 `outputs/<baseline或composite>/<倍率>/<日期样本重复标识>/`，相同配置重跑更新同一路径；不同数据集请显式提供独立 `--output-root`。
 

@@ -146,14 +146,16 @@ The main goal of this project is to explore how image-derived morphological and 
 
 ## DAPI-only Model A workflows
 
-- `Ekin_DAPI_OCT4/`: feeder-free Model A，OCT4 仅在聚类后按 BASC 二元表征；旧双染流程在 `legacy/`。
+- `Suzui/DAPI/`: 原根目录中的 Suzui 选焦、分割、特征/QC、聚类、推理、SA/SHAP 和时序 GIF 脚本。上文列出的编号脚本均已移到此处。
+- `Suzui/DAPI_OCT4/`: 原 `double_work_build`；Suzui 配对染色对照，复用相邻 DAPI 实现，详见 [Suzui 流程说明](Suzui/README.md)。
+- `Ekin_DAPI_OCT4/`: Ekin feeder-free Model A，OCT4 仅在聚类后按 BASC 二元表征，与 Suzui 配对染色流程分开。
 - `Ekin_DAPI_YAP/`: Model A，YAP 仅在聚类后以连续核/核周比值表征。
 - `shared/`: 公共 DAPI 模型实现和入口配置，不重复复制算法。
 - 公式见 `Ekin_DAPI_OCT4/COMPOSITE_FEATURES.md`。
 
 ### 命名与运行约定
 
-- 稳定目录名采用 `来源_通道组合`，如 `Ekin_DAPI_OCT4`，不携带算法版本。
+- 按来源与通道/流程组织，不携带算法版本；单流程可用 `Ekin_DAPI_OCT4`，有多个共享流程时采用 `Suzui/DAPI`、`Suzui/DAPI_OCT4`。
 - 两个分析目录都有 `run_baseline.py` 和 `run_composite.py`，可直接在 PyCharm 右键运行。
 - `baseline` 使用基线形态、DAPI 强度和邻域特征；`composite` 在此基础上增加无量纲生物学相关代理。两者都计算对照指标，但采用指定方案生成最终结果。
 - 入口顶部 `MAGNIFICATION` 可设为 `20x` 或 `40x`，也可通过运行参数覆盖。方案、倍率及 OCT4 样本分别存放结果，默认不互相覆盖；同配置重跑更新同一路径，不同数据集应指定独立 `--output-root`。
