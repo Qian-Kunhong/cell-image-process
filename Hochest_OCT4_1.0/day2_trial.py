@@ -26,7 +26,7 @@ from PIL import Image
 from scipy.spatial import cKDTree
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import adjusted_rand_score, silhouette_score
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import RobustScaler
 from skimage.measure import regionprops
@@ -41,7 +41,7 @@ DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent / "outputs" / "day2_trial"
 RANDOM_STATE = 42
 FIT_MAGNIFICATION = "40x"
 K_MIN = 2
-K_MAX = 8
+K_MAX = 12
 GMM_COVARIANCE_TYPE = "diag"
 GMM_N_INIT = 5
 PCA_COMPONENTS = 5
@@ -96,6 +96,42 @@ MODEL_FEATURES = [
     "nb_dapi_mean_intensity_std",
     "fixed_neighbor_count",
 ]
+
+# Dimensionless, DAPI-only morphology/spatial proxies.  These names deliberately
+# describe measurements rather than unverified biological states.
+COMPOSITE_FEATURES = [
+    "nuclear_size_log_ratio",
+    "nuclear_elongation_log",
+    "boundary_irregularity",
+    "convexity_deficit",
+    "chromatin_cv_proxy",
+    "chromatin_range_ratio",
+    "nearest_spacing_nuclear_units",
+    "local_crowding_area_fraction_proxy",
+    "neighbor_size_log_disagreement",
+    "neighbor_shape_disagreement",
+    "neighborhood_angular_asymmetry",
+]
+
+# Algebraic restatements of an existing single-cell column remain useful in
+# exported interpretation tables, but including them would implicitly double
+# weight area/aspect-ratio/circularity/solidity.  Only the relative-intensity
+# and spatial-context composites below enter the augmented model.
+COMPOSITE_MODEL_FEATURES = [
+    "chromatin_cv_proxy",
+    "chromatin_range_ratio",
+    "nearest_spacing_nuclear_units",
+    "local_crowding_area_fraction_proxy",
+    "neighbor_size_log_disagreement",
+    "neighbor_shape_disagreement",
+    "neighborhood_angular_asymmetry",
+]
+
+FORBIDDEN_MODEL_TOKENS = (
+    "oct4", "oct_4", "oct-4", "af488", "yap", "experimental_group",
+    "ha_exposure", "ha_concentration", "seeding_density", "culture_day",
+    "treatment", "time", "dose", "replicate", "sample",
+)
 
 META_COLUMNS = [
     "cell_id",
@@ -370,6 +406,10 @@ def add_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
         "nb_dapi_mean_intensity_mean",
         "nb_dapi_mean_intensity_std",
         "fixed_neighbor_count",
+        "local_crowding_area_fraction_proxy",
+        "neighbor_size_log_disagreement",
+        "neighbor_shape_disagreement",
+        "neighborhood_angular_asymmetry",
     ]
     for col in spatial_columns:
         out[col] = np.nan
@@ -409,6 +449,22 @@ def add_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
         if len(neighbors) == 0:
             continue
 
+        vectors = coords[neighbors] - coords[i]
+        norms = np.linalg.norm(vectors, axis=1)
+        unit = vectors[norms > 0] / norms[norms > 0, None]
+        out.at[i, "neighborhood_angular_asymmetry"] = (
+            float(np.linalg.norm(np.mean(unit, axis=0))) if len(unit) else np.nan
+        )
+        out.at[i, "neighbor_size_log_disagreement"] = float(
+            np.nanmedian(np.abs(np.log(np.maximum(area[neighbors], 1e-12) / max(area[i], 1e-12))))
+        )
+        out.at[i, "neighbor_shape_disagreement"] = float(
+            np.nanmedian(np.sqrt((circ[neighbors] - circ[i]) ** 2 + (ecc[neighbors] - ecc[i]) ** 2))
+        )
+        out.at[i, "local_crowding_area_fraction_proxy"] = float(
+            np.nansum(area[neighbors]) / (math.pi * radius * radius)
+        )
+
         for values, mean_col, std_col in [
             (area, "nb_area_mean_px2", "nb_area_std_px2"),
             (circ, "nb_circularity_mean", "nb_circularity_std"),
@@ -423,6 +479,42 @@ def add_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
     median_eqdiam = float(np.nanmedian(out["equivalent_diameter_px"]))
     radius = 2.5 * median_eqdiam
     out["fixed_neighbor_count"] = fixed_radius_neighbor_count(coords, radius)
+    return out
+
+
+def add_composite_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add reproducible, dimensionless DAPI morphology/spatial proxies.
+
+    Size is normalized within an image, so image identifiers determine only the
+    reference median and are never numerical model inputs.  No marker channel or
+    experimental metadata is read here.
+    """
+    required = set(MODEL_FEATURES) | {
+        "image_id", "local_crowding_area_fraction_proxy",
+        "neighbor_size_log_disagreement", "neighbor_shape_disagreement",
+        "neighborhood_angular_asymmetry",
+    }
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise KeyError(f"Missing inputs for composite features: {missing}")
+    out = df.copy()
+    area = pd.to_numeric(out["area_px"], errors="coerce").clip(lower=1e-12)
+    image_median_area = area.groupby(out["image_id"], sort=False).transform("median").clip(lower=1e-12)
+    mean_i = pd.to_numeric(out["dapi_mean_intensity"], errors="coerce").abs().clip(lower=1e-12)
+    out["nuclear_size_log_ratio"] = np.log(area / image_median_area)
+    out["nuclear_elongation_log"] = np.log(pd.to_numeric(out["aspect_ratio"], errors="coerce").clip(lower=1.0))
+    out["boundary_irregularity"] = (
+        pd.to_numeric(out["perimeter_px"], errors="coerce") /
+        (2.0 * np.sqrt(math.pi * area)) - 1.0
+    )
+    out["convexity_deficit"] = 1.0 - pd.to_numeric(out["solidity"], errors="coerce")
+    out["chromatin_cv_proxy"] = pd.to_numeric(out["dapi_std_intensity"], errors="coerce") / mean_i
+    out["chromatin_range_ratio"] = pd.to_numeric(out["dapi_intensity_range"], errors="coerce") / mean_i
+    out["nearest_spacing_nuclear_units"] = (
+        pd.to_numeric(out["nn1_distance_px"], errors="coerce") /
+        pd.to_numeric(out["equivalent_diameter_px"], errors="coerce").clip(lower=1e-12)
+    )
+    validate_model_feature_names(COMPOSITE_FEATURES)
     return out
 
 
@@ -504,6 +596,7 @@ def extract_pair_features(pair: ImagePair, mask_path: Path) -> tuple[pd.DataFram
     if len(features) == 0:
         return features, oct4_internal
     features = add_spatial_features(features)
+    features = add_composite_features(features)
     features["qc_keep"] = (~features["touches_border"]).astype(bool)
     features["qc_reason"] = np.where(features["touches_border"], "touches_border", "keep")
     return features, oct4_internal
@@ -526,19 +619,21 @@ def extract_all_features(
 
 
 def validate_model_feature_names(feature_columns: Iterable[str]) -> None:
-    forbidden = ("oct4", "oct_4", "oct-4", "af488")
-    violations = [col for col in feature_columns if any(token in col.lower() for token in forbidden)]
+    violations = [col for col in feature_columns if any(token in col.lower() for token in FORBIDDEN_MODEL_TOKENS)]
     if violations:
         raise AssertionError(f"OCT4 leakage detected in Model A feature columns: {violations}")
 
 
-def preprocess_features(df: pd.DataFrame) -> tuple[np.ndarray, list[str], dict]:
-    missing = [col for col in MODEL_FEATURES if col not in df.columns]
+def preprocess_features(df: pd.DataFrame, feature_set: str = "augmented") -> tuple[np.ndarray, list[str], dict]:
+    requested = MODEL_FEATURES if feature_set == "raw" else MODEL_FEATURES + COMPOSITE_MODEL_FEATURES
+    if feature_set not in {"raw", "augmented"}:
+        raise ValueError("feature_set must be 'raw' or 'augmented'")
+    missing = [col for col in requested if col not in df.columns]
     if missing:
         raise KeyError(f"Missing Model A feature columns: {missing}")
-    validate_model_feature_names(MODEL_FEATURES)
+    validate_model_feature_names(requested)
 
-    numeric = df[MODEL_FEATURES].apply(pd.to_numeric, errors="coerce")
+    numeric = df[requested].apply(pd.to_numeric, errors="coerce")
     numeric = numeric.replace([np.inf, -np.inf], np.nan)
     all_missing = [col for col in numeric.columns if numeric[col].notna().sum() == 0]
     numeric = numeric.drop(columns=all_missing)
@@ -563,6 +658,7 @@ def preprocess_features(df: pd.DataFrame) -> tuple[np.ndarray, list[str], dict]:
         "imputer": "SimpleImputer(strategy='median')",
         "scaler": "RobustScaler",
         "feature_selection_rule": "explicit existing feature families; no correlation cutoff",
+        "feature_set": feature_set,
     }
     return scaled, feature_columns, info
 
@@ -584,7 +680,7 @@ def fragmentation_penalty(cluster_counts: np.ndarray) -> dict:
 
 
 def fit_gmm_with_dynamic_k(
-    scaled: np.ndarray,
+    scaled: np.ndarray, random_state: int = RANDOM_STATE,
 ) -> tuple[GaussianMixture, np.ndarray, np.ndarray, PCA, pd.DataFrame, int]:
     n_components = min(PCA_COMPONENTS, scaled.shape[1], scaled.shape[0] - 1)
     if n_components < 2:
@@ -603,7 +699,7 @@ def fit_gmm_with_dynamic_k(
         model = GaussianMixture(
             n_components=k,
             covariance_type=GMM_COVARIANCE_TYPE,
-            random_state=RANDOM_STATE,
+            random_state=random_state,
             n_init=GMM_N_INIT,
             reg_covar=1e-6,
         )
@@ -626,6 +722,7 @@ def fit_gmm_with_dynamic_k(
                 "silhouette": silhouette,
                 "fit_log_likelihood_mean": float(model.score(pca_values)),
                 "mean_max_posterior": float(probabilities.max(axis=1).mean()),
+                "fraction_max_posterior_below_0_8": float((probabilities.max(axis=1) < 0.8).mean()),
                 **penalty,
                 "bic_penalized": bic + penalty["fragmentation_penalty"],
             }
@@ -641,6 +738,40 @@ def fit_gmm_with_dynamic_k(
     raw_labels = best_model.predict(pca_values)
     raw_probabilities = best_model.predict_proba(pca_values)
     return best_model, raw_labels, raw_probabilities, pca, selection, best_k
+
+
+def compare_feature_models(df: pd.DataFrame) -> tuple[dict, dict]:
+    """Compare raw and augmented models without using post-hoc markers/metadata."""
+    reports, artifacts = {}, {}
+    for feature_set in ("raw", "augmented"):
+        scaled, columns, prep = preprocess_features(df, feature_set=feature_set)
+        model, labels, probs, pca, selection, selected_k = fit_gmm_with_dynamic_k(scaled)
+        seed_aris = []
+        for seed in (7, 19, 73):
+            _, alternate, _, _, _, _ = fit_gmm_with_dynamic_k(scaled, random_state=seed)
+            seed_aris.append(float(adjusted_rand_score(labels, alternate)))
+        reports[feature_set] = {
+            "n_features": len(columns), "selected_k": selected_k,
+            "selected_k_at_search_upper_bound": selected_k == int(selection["n_clusters"].max()),
+            "mean_max_posterior": float(probs.max(axis=1).mean()),
+            "fraction_max_posterior_below_0_8": float((probs.max(axis=1) < 0.8).mean()),
+            "seed_stability_ari_mean": float(np.mean(seed_aris)),
+            "seed_stability_ari_values": seed_aris,
+            "selected_bic": float(selection.loc[selection.n_clusters.eq(selected_k), "bic"].iloc[0]),
+            "preprocessing": prep,
+        }
+        artifacts[feature_set] = (scaled, columns, model, labels, probs, pca, selection, selected_k)
+    corr = df[MODEL_FEATURES + COMPOSITE_FEATURES].corr(method="spearman").abs()
+    reports["augmented"]["composite_max_abs_spearman_with_raw"] = {
+        col: float(corr.loc[col, MODEL_FEATURES].max()) for col in COMPOSITE_FEATURES
+    }
+    delta = reports["augmented"]["mean_max_posterior"] - reports["raw"]["mean_max_posterior"]
+    reports["conclusion"] = {
+        "posterior_confidence_delta_augmented_minus_raw": float(delta),
+        "confidence_improved": bool(delta > 0),
+        "note": "Composite features are retained for interpretability; improvement is not assumed.",
+    }
+    return reports, artifacts
 
 
 def reorder_phenotypes_by_size(
@@ -853,8 +984,10 @@ def save_selection_plot(
 
 def phenotype_colors(labels: Iterable[str]) -> dict[str, tuple]:
     unique = sorted(set(str(label) for label in labels), key=lambda x: int(x.split()[-1]))
-    cmap = plt.get_cmap("tab10")
-    return {label: cmap(index % cmap.N) for index, label in enumerate(unique)}
+    cmap = plt.get_cmap("tab20")
+    # The color is a pure function of the global phenotype rank.  A phenotype
+    # therefore keeps its color even when an individual image lacks lower ranks.
+    return {label: cmap((int(label.split()[-1]) - 1) % cmap.N) for label in unique}
 
 
 def save_phenotype_overlay_on_merge(
@@ -1198,9 +1331,15 @@ def run_trial(args: argparse.Namespace) -> None:
 
     # Model A preprocessing and GMM occur before any OCT4 table is merged.
     stage(f"preprocessing {len(fit_df)} QC-kept cells using DAPI/DNA features only")
-    scaled, feature_columns, preprocess_info = preprocess_features(fit_df)
+    comparison, comparison_artifacts = compare_feature_models(fit_df)
+    scaled, feature_columns, model, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts["augmented"]
+    preprocess_info = comparison["augmented"]["preprocessing"]
+    pd.DataFrame([
+        {"feature_set": name, **{k: v for k, v in report.items() if not isinstance(v, (dict, list))}}
+        for name, report in comparison.items() if name in {"raw", "augmented"}
+    ]).to_csv(tables_dir / "raw_vs_composite_model_comparison.csv", index=False, encoding="utf-8-sig")
+    save_json(comparison, tables_dir / "raw_vs_composite_model_comparison.json")
     stage("starting dynamic GMM search")
-    model, raw_labels, raw_probabilities, pca, selection, selected_k = fit_gmm_with_dynamic_k(scaled)
     stage(f"dynamic GMM search complete; selected K={selected_k}")
     ranks, phenotype_labels, ordered_raw_ids, probabilities = reorder_phenotypes_by_size(
         raw_labels, raw_probabilities
@@ -1341,7 +1480,10 @@ def run_trial(args: argparse.Namespace) -> None:
             "random_state": RANDOM_STATE,
             "ordered_raw_component_ids_by_size": ordered_raw_ids,
             "pca_explained_variance_ratio": pca.explained_variance_ratio_,
+            "selected_k_at_search_upper_bound": selected_k == int(selection["n_clusters"].max()),
+            "fraction_max_posterior_below_0_8": float((probabilities.max(axis=1) < 0.8).mean()),
         },
+        "raw_vs_composite_model_comparison": comparison,
         "umap": {
             "n_neighbors": min(30, max(2, len(scaled) - 1)),
             "min_dist": 0.1,

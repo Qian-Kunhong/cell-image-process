@@ -17,3 +17,9 @@ ENV/
 Thumbs.db
 
 *.log
+**/outputs/
+**/segmentation/
+*.npy
+*.npz
+*.joblib
+*.pkl

@@ -1,5 +1,7 @@
 # Feeder-free Model A trial
 
+复合特征的公式、方向、代理解释和限制见 `COMPOSITE_FEATURES.md`。每次运行会额外输出 `raw_vs_composite_model_comparison.csv/json`，并把 K 搜索扩展到 2–12，显式报告上限命中和低置信度比例。
+
 This directory is intentionally isolated from the legacy continuous-OCT4 and
 normal/deviated workflows.
 
@@ -79,6 +81,8 @@ For the separate Day 4 / 20x feasibility trials, run:
 
 Their outputs are isolated under `outputs/day4_sample1_20x_trial/` and
 `outputs/day4_sample2_20x_trial/`; they do not overwrite the 40x results.
+
+Phenotype 编号只在同一倍率、同一整套拟合模型内有效；20× 的 `Phenotype 1` 不等于 40× 的同名编号。跨图片叠图使用按全局 phenotype rank 固定的 `tab20` 调色板，图例放在绘图区外。
 
 The phenotype-membership comparison panels use one blue hue. Posterior
 probability is encoded only by transparency: higher probability is more opaque,

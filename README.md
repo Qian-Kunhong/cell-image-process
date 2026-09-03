@@ -143,3 +143,11 @@ This repository contains **research-oriented analysis code** rather than a packa
 ## Purpose
 
 The main goal of this project is to explore how image-derived morphological and spatial information can be converted into quantitative features and used with machine-learning methods to evaluate heterogeneous cell states.
+
+## DAPI-only Model A workflows
+
+- `Hochest_OCT4_1.0/`: feeder-free DAPI morphology clustering; OCT4 is used only for post-clustering BASC binary characterization.
+- `YAP_DAPI_1.0/`: DAPI morphology clustering; YAP is used only as a continuous post-clustering nuclear/perinuclear ratio.
+- Composite-feature formulas, units, directions, and proxy interpretations are documented in `Hochest_OCT4_1.0/COMPOSITE_FEATURES.md`.
+
+Both workflows compare raw and augmented feature models, search K=2–12, and retain all GMM posteriors. 20x and 40x are fitted independently; equal phenotype numbers across magnifications do not imply the same phenotype. Experimental group, treatment time/concentration, seeding density, and other metadata never enter the morphology model.
