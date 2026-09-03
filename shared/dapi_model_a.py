@@ -36,7 +36,7 @@ from skimage.segmentation import find_boundaries
 DEFAULT_DATA_ROOT = Path(
     r"E:\Kino-oka Lab\Immunostaining Data_Ekin\Immunostaining Data_Ekin\Day 2 Data"
 )
-DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent / "outputs" / "day2_trial"
+DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent.parent / "Ekin_DAPI_OCT4" / "outputs" / "day2_trial"
 
 RANDOM_STATE = 42
 FIT_MAGNIFICATION = "40x"
@@ -164,7 +164,7 @@ class ImagePair:
     merge_path: Path | None
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Feeder-free Model A single-image trial using DAPI/DNA features only for GMM."
     )
@@ -180,7 +180,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Reuse existing masks under the selected output directory.",
     )
-    return parser.parse_args()
+    parser.add_argument("--feature-set", choices=("baseline", "composite"), default="composite")
+    return parser.parse_args(argv)
 
 
 def json_ready(value):
@@ -1332,8 +1333,9 @@ def run_trial(args: argparse.Namespace) -> None:
     # Model A preprocessing and GMM occur before any OCT4 table is merged.
     stage(f"preprocessing {len(fit_df)} QC-kept cells using DAPI/DNA features only")
     comparison, comparison_artifacts = compare_feature_models(fit_df)
-    scaled, feature_columns, model, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts["augmented"]
-    preprocess_info = comparison["augmented"]["preprocessing"]
+    selected_feature_set = "raw" if args.feature_set == "baseline" else "augmented"
+    scaled, feature_columns, model, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts[selected_feature_set]
+    preprocess_info = comparison[selected_feature_set]["preprocessing"]
     pd.DataFrame([
         {"feature_set": name, **{k: v for k, v in report.items() if not isinstance(v, (dict, list))}}
         for name, report in comparison.items() if name in {"raw", "augmented"}
@@ -1461,6 +1463,7 @@ def run_trial(args: argparse.Namespace) -> None:
         "input_limitation": "8-bit pseudo-colored PNG exports; no biological micrometre-per-pixel calibration",
         "data_root": args.data_root,
         "output_root": output_root,
+        "feature_set": args.feature_set,
         "culture_day": args.culture_day,
         "sample": args.sample,
         "replicate": args.replicate,

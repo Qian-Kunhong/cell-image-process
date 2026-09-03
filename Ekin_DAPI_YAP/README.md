@@ -1,6 +1,8 @@
-# Ekin_DAPI_YAP_2.0
+# Ekin_DAPI_YAP
 
-2.x 为基于生物学相关自适应复合特征的系列；这里的“生物学相关”指形态与邻域代理，不是经过验证的生物学状态标签。共享 DAPI 复合特征的公式和边界见 `../Ekin_DAPI_OCT_1.1/COMPOSITE_FEATURES.md`。运行会同时比较原始模型和复合特征模型，输出 `raw_vs_composite_model_comparison.csv/json`；不会预设复合特征改善结果。
+目录名只表示来源与通道。PyCharm 中直接运行 `run_baseline.py`（基线特征）或 `run_composite.py`（增加生物学相关复合特征）；公共实现位于 `../shared/dapi_model_a.py`，公式见 `../Ekin_DAPI_OCT4/COMPOSITE_FEATURES.md`。生物学相关量是形态与邻域代理，不是经过验证的生物学状态标签。两入口均保留原始/增强模型对照指标，但最终 phenotype、UMAP 和后表征采用入口指定的模型。
+
+入口顶部 `MAGNIFICATION` 默认 `40x`，可改为 `20x`；也可设置运行参数 `--fit-magnification 20x`、`--data-root`、`--reuse-masks`。默认结果分别位于 `outputs/baseline/<倍率>/all_fields/` 和 `outputs/composite/<倍率>/all_fields/`；同配置重跑更新同一路径。不同数据集请指定独立 `--output-root`。`run_info.json` 记录最终 `feature_set`。
 
 This workflow is intentionally separate from the OCT4/BASC workflow.
 

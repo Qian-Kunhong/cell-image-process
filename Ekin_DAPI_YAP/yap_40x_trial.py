@@ -63,7 +63,7 @@ SEEDING_DENSITY_CELLS_PER_CM2 = {
 def load_model_a_core():
     parent = Path(__file__).resolve().parent.parent
     candidates = [
-        parent / "Ekin_DAPI_OCT_1.1" / "day2_trial.py",
+        parent / "shared" / "dapi_model_a.py",
     ]
     core_path = next((path for path in candidates if path.exists()), None)
     if core_path is None:
@@ -97,7 +97,7 @@ class YAPImageSet:
     merge_path: Path
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "DAPI-only unsupervised morphology discovery with post-hoc continuous "
@@ -113,7 +113,8 @@ def parse_args() -> argparse.Namespace:
         "--skip-umap", action="store_true",
         help="Validation/debug mode: skip visualization-only UMAP and use PCA1/2 as plotting coordinates.",
     )
-    return parser.parse_args()
+    parser.add_argument("--feature-set", choices=("baseline", "composite"), default="composite")
+    return parser.parse_args(argv)
 
 
 def json_ready(value):
@@ -924,8 +925,9 @@ def run(args: argparse.Namespace) -> None:
 
     stage(f"preprocessing {len(fit_df)} cells using DAPI-only features")
     comparison, comparison_artifacts = CORE.compare_feature_models(fit_df)
-    scaled, feature_columns, _, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts["augmented"]
-    preprocess_info = comparison["augmented"]["preprocessing"]
+    selected_feature_set = "raw" if args.feature_set == "baseline" else "augmented"
+    scaled, feature_columns, _, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts[selected_feature_set]
+    preprocess_info = comparison[selected_feature_set]["preprocessing"]
     pd.DataFrame([
         {"feature_set": name, **{k: v for k, v in report.items() if not isinstance(v, (dict, list))}}
         for name, report in comparison.items() if name in {"raw", "augmented"}
@@ -1021,6 +1023,7 @@ def run(args: argparse.Namespace) -> None:
         ),
         "data_root": args.data_root.resolve(),
         "output_root": output_root,
+        "feature_set": args.feature_set,
         "dapi_input": "8-bit grayscale *_DAPI_ORG.png exports",
         "yap_input": "8-bit grayscale *_AF488_ORG.png exports; interpreted as YAP because of dataset identity, pending antibody record",
         "n_complete_image_sets_discovered": len(all_sets),

@@ -48,7 +48,10 @@ def load_module_from_path(module_name: str, path: Path):
 
 
 def sibling_single_work_dir(current_file: Path) -> Path:
-    return current_file.resolve().parent.parent / "cell image"
+    for directory in current_file.resolve().parents:
+        if (directory / "03-1_qc_filter.py").is_file():
+            return directory
+    raise FileNotFoundError("Cannot locate repository legacy single-stain scripts")
 
 
 def strip_mask_suffix(stem: str) -> str:

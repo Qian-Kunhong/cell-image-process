@@ -146,18 +146,21 @@ The main goal of this project is to explore how image-derived morphological and 
 
 ## DAPI-only Model A workflows
 
-- `Ekin_DAPI_OCT_1.0/`: 既有 DAPI 核形态/邻域特征流程，配对 OCT4 强度用于后续对照。
-- `Ekin_DAPI_OCT_1.1/`: feeder-free DAPI Model A；OCT4 仅在聚类后按 BASC 二元表征。
-- `Ekin_DAPI_YAP_2.0/`: DAPI 复合特征 Model A；YAP 仅在聚类后以连续核/核周比值表征。
-- 复合特征公式、量纲、方向和代理解释见 `Ekin_DAPI_OCT_1.1/COMPOSITE_FEATURES.md`。
+- `Ekin_DAPI_OCT4/`: feeder-free Model A，OCT4 仅在聚类后按 BASC 二元表征；旧双染流程在 `legacy/`。
+- `Ekin_DAPI_YAP/`: Model A，YAP 仅在聚类后以连续核/核周比值表征。
+- `shared/`: 公共 DAPI 模型实现和入口配置，不重复复制算法。
+- 公式见 `Ekin_DAPI_OCT4/COMPOSITE_FEATURES.md`。
 
-### 版本命名约定
+### 命名与运行约定
 
-- **1.x：基于原始特征的基线系列。** 原始特征包含已提取的核形态、强度或邻域统计，不是原始像素。
-- **2.x：基于生物学相关自适应复合特征的系列。** 在原始特征基础上加入无量纲形态/邻域代理，仍保留原始模型作对照；这些代理不等同于细胞周期、多能性或分化标签。
+- 稳定目录名采用 `来源_通道组合`，如 `Ekin_DAPI_OCT4`，不携带算法版本。
+- 两个分析目录都有 `run_baseline.py` 和 `run_composite.py`，可直接在 PyCharm 右键运行。
+- `baseline` 使用基线形态、DAPI 强度和邻域特征；`composite` 在此基础上增加无量纲生物学相关代理。两者都计算对照指标，但采用指定方案生成最终结果。
+- 入口顶部 `MAGNIFICATION` 可设为 `20x` 或 `40x`，也可通过运行参数覆盖。方案、倍率及 OCT4 样本分别存放结果，默认不互相覆盖；同配置重跑更新同一路径，不同数据集应指定独立 `--output-root`。
+- 数据来源、通道、流程、特征方案与软件版本分开表示；代码版本通过 Git 提交追踪，不再用 1.x/2.x 暗示特征类型。
 
-当前实现的例外：1.1 已接入原始/复合特征对照，并默认输出增强模型结果，同时是 2.0 的共享核心。因此版本号表示系列来源，不能严格用来判定是否仅采用原始特征。本次重命名没有改变算法或重算结果。
+PyCharm 解释器请选已有的 `cellpose` 环境。命令行示例：`python Ekin_DAPI_YAP/run_baseline.py --fit-magnification 20x`。旧 `.ps1` 和试验入口保留兼容，默认 composite，继续采用它们原有的输出路径；推荐日常使用两个新 Python 入口。
 
-原目录 `double_work_build`、`Hochest_OCT4_1.0`、`YAP_DAPI_1.0` 已分别更名为以上三个目录。既有输出和掩膜随目录保留；旧 `run_info.json` 中的绝对路径属于历史运行记录，未改写。
+本次没有重算历史结果或改写其绝对路径。Git 不包含生成结果、掩膜和模型缓存；其他工作树/原项目中已有的旧结果目录保留，不自动搬迁或删除。
 
-The 1.1 and 2.0 Model A workflows compare raw and augmented feature models, search K=2–12, and retain all GMM posteriors. 20x and 40x are fitted independently; equal phenotype numbers across magnifications do not imply the same phenotype. Experimental group, treatment time/concentration, seeding density, and other metadata never enter the morphology model.
+Both Model A workflows compare raw and augmented feature models, search K=2–12, and retain all GMM posteriors. 20x and 40x are fitted independently; equal phenotype numbers across magnifications do not imply the same phenotype. Experimental group, treatment time/concentration, seeding density, and other metadata never enter the morphology model.

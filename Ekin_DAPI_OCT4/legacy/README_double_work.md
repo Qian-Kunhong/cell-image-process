@@ -1,6 +1,6 @@
-# Ekin_DAPI_OCT_1.0 — DAPI/OCT4 双染流程
+# Ekin_DAPI_OCT4/legacy — 旧 DAPI/OCT4 双染流程
 
-1.x 表示基于原始特征的基线系列。本版本使用既有 DAPI 核形态与邻域特征，未接入 2.x 的新增生物学相关复合特征方案。“原始特征”不等于原始像素，也不意味着没有邻域特征。
+本流程使用既有 DAPI 核形态与邻域特征，不是新版 Model A 的 `baseline` 入口。新版入口在上一级目录。旧算法独立保留，目录名不再携带软件版本。
 
 This folder contains a DAPI + Oct-4 workflow that is intentionally separated from the original single-stain scripts.
 

@@ -1,6 +1,8 @@
-# Ekin_DAPI_OCT_1.1 — Feeder-free Model A
+# Ekin_DAPI_OCT4 — Feeder-free Model A
 
-1.x 表示原始特征基线系列。注意：当前 1.1 已扩展为同时比较原始特征与复合特征，并默认用增强模型输出 phenotype；不能把此目录名理解为“只使用原始特征”。本目录也提供 2.0 使用的共享 DAPI 核心。
+目录名只表示来源与通道，不再以 1.x/2.x 表示特征类型。PyCharm 中直接运行 `run_baseline.py` 或 `run_composite.py`，分别输出基线或增强模型；两者仍计算对照指标。公共实现位于 `../shared/dapi_model_a.py`，旧双染流程在 `legacy/`。
+
+入口顶部 `MAGNIFICATION` 默认 `40x`，可改为 `20x`；也可在运行参数中指定 `--fit-magnification 20x`、`--data-root`、`--culture-day`、`--sample`、`--reuse-masks`。默认输出为 `outputs/<baseline或composite>/<倍率>/<日期样本重复标识>/`，相同配置重跑更新同一路径；不同数据集请显式提供独立 `--output-root`。
 
 复合特征的公式、方向、代理解释和限制见 `COMPOSITE_FEATURES.md`。每次运行会额外输出 `raw_vs_composite_model_comparison.csv/json`，并把 K 搜索扩展到 2–12，显式报告上限命中和低置信度比例。
 
