@@ -10,6 +10,13 @@ from matplotlib.patches import Patch
 import numpy as np
 from skimage.segmentation import find_boundaries
 
+DISPLAY_PMAX_THRESHOLD = 0.5
+
+
+def low_confidence_rows(rows):
+    """Display flag only: equality at the threshold is not flagged."""
+    return rows[rows["gmm_max_posterior"] < DISPLAY_PMAX_THRESHOLD]
+
 
 def qc_keep_mask(mask, rows, edge_buffer_px=0):
     """Return a copy containing result-table labels, rejecting any touch-edge label.
@@ -47,7 +54,7 @@ def categorical_rgb(mask, rows, colors):
 def save_clear_phenotypes(dapi, raw_mask, rows, colors, title, path, qc_mask_path, edge_buffer_px=0):
     clean = qc_keep_mask(raw_mask, rows, edge_buffer_px=edge_buffer_px)
     rgb = categorical_rgb(clean, rows, colors)
-    low = rows[rows["gmm_max_posterior"] < 0.80]
+    low = low_confidence_rows(rows)
     excluded = len(np.setdiff1d(np.unique(raw_mask[raw_mask > 0]), rows["label"]))
     fig, axes = plt.subplots(1, 2, figsize=(20, 9))
     axes[0].imshow(dapi, cmap="gray", interpolation="nearest")
@@ -80,7 +87,7 @@ def save_clear_phenotypes(dapi, raw_mask, rows, colors, title, path, qc_mask_pat
     cross_key = Line2D(
         [], [], marker="x", color="white", markeredgewidth=1.4,
         markersize=7, linestyle="None",
-        label=f"Uncertain assignment\nPmax < 0.80 (n={len(low)})\n(crosses on left panel)",
+        label=f"Uncertain assignment\nPmax < {DISPLAY_PMAX_THRESHOLD:.2f} (n={len(low)})\n(crosses on left panel)",
         path_effects=cross_effects,
     )
     handles.append(cross_key)

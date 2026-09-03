@@ -1,10 +1,14 @@
 import unittest
 import numpy as np
 import pandas as pd
-from phenotype_display import categorical_rgb, qc_keep_mask
+from phenotype_display import categorical_rgb, qc_keep_mask, low_confidence_rows
 
 
 class DisplayTests(unittest.TestCase):
+    def test_display_threshold_strictly_below_half(self):
+        rows = pd.DataFrame({"gmm_max_posterior": [0.49, 0.5, 0.51, 0.79]})
+        self.assertEqual(low_confidence_rows(rows).index.tolist(), [0])
+
     def setUp(self):
         self.mask = np.zeros((12, 14), dtype=np.int32)
         self.mask[0:3, 2:5] = 1

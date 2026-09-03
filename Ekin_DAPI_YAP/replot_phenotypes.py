@@ -14,8 +14,10 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--backup-existing", action="store_true", help="Opt in to keeping old overlay images")
     args = parser.parse_args()
     from yap_40x_trial import discover_image_sets, save_phenotype_overlay
+    from phenotype_display import DISPLAY_PMAX_THRESHOLD
     root = args.output_root.resolve()
     result_path = root / "tables" / "model_a_single_cell_results.csv"
     result_hash = digest(result_path)
@@ -25,13 +27,13 @@ def main():
     selected = [item for item in sets if item.image_id in set(result.image_id)]
     if len(selected) != result.image_id.nunique():
         raise ValueError("Cannot resolve every result image")
-    audit = {"purpose": "display only; no refitting or change to cell results", "images": []}
+    audit = {"purpose": "display only; no refitting or change to cell results", "display_pmax_threshold": DISPLAY_PMAX_THRESHOLD, "images": []}
     for item in selected:
         mask_path = root / "segmentation" / "masks" / f"{item.image_id}_mask.npy"
         before = digest(mask_path)
         path = root / "figures" / "phenotype_overlays" / f"{item.image_id}_phenotypes.png"
         backup = root / "figures" / "phenotype_overlays_before_display_fix" / path.name
-        if path.exists() and not backup.exists():
+        if args.backup_existing and path.exists() and not backup.exists():
             backup.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, backup)
         save_phenotype_overlay(item, mask_path, result, path)
