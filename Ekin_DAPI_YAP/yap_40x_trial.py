@@ -26,6 +26,8 @@ from skimage.segmentation import expand_labels, find_boundaries
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize_group_differences import build_descriptive_tables
 from phenotype_display import save_clear_phenotypes
+from yap_ratio_qc import ALGORITHM_VERSION, build_ring_labels, load_config, measure_array, qc_summary
+from yap_ratio_display import save_ratio_figure, save_sampling_figure, save_qc_summary_figure
 
 
 DEFAULT_DATA_ROOT = Path(r"E:\Kino-oka Lab\Immunostaining Data_Ekin\2307YapLocalizationImmuno")
@@ -117,6 +119,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--feature-set", choices=("baseline", "composite"), default="composite")
     parser.add_argument("--edge-buffer-px", type=int, default=2,
                         help="Exclude nuclei whose mask is within this many pixels of the image edge (default: 2).")
+    parser.add_argument("--yap-qc-config", type=Path, help="Optional JSON overrides for post-hoc YAP QC only.")
+    parser.add_argument("--yap-background-roi-dir", type=Path,
+                        help="Optional binary PNG background ROIs named <image_id>_background.png; nonzero = cell-free.")
     return parser.parse_args(argv)
 
 
@@ -406,87 +411,16 @@ def extract_all_dapi_features(
     return pd.concat(tables, ignore_index=True)
 
 
-def build_ring_labels(mask: np.ndarray) -> tuple[np.ndarray, int, int, float]:
-    diameters = [float(prop.equivalent_diameter_area) for prop in regionprops(mask)]
-    if not diameters:
-        raise RuntimeError("Cannot construct YAP rings without segmented nuclei")
-    median_diameter = float(np.median(diameters))
-    inner_gap_px = max(1, int(round(0.08 * median_diameter)))
-    outer_distance_px = max(inner_gap_px + 2, int(round(0.35 * median_diameter)))
-    inner = expand_labels(mask, distance=inner_gap_px)
-    outer = expand_labels(mask, distance=outer_distance_px)
-    ring_labels = outer.copy()
-    ring_labels[inner > 0] = 0
-    return ring_labels.astype(np.int32), inner_gap_px, outer_distance_px, median_diameter
-
-
-def measure_yap_posthoc(item: YAPImageSet, mask_path: Path) -> tuple[pd.DataFrame, np.ndarray, dict]:
+def measure_yap_posthoc(item: YAPImageSet, mask_path: Path, config=None,
+                        background_roi_dir: Path | None = None) -> tuple[pd.DataFrame, np.ndarray, dict]:
     mask = np.load(mask_path)
     yap = load_gray(item.yap_org_path)
-    if mask.shape != yap.shape:
-        raise ValueError(f"YAP/mask mismatch for {item.image_id}")
-    ring_labels, inner_gap_px, outer_distance_px, median_diameter = build_ring_labels(mask)
-    far_distance = max(outer_distance_px + 2, int(round(1.5 * median_diameter)))
-    far_from_nuclei = expand_labels(mask, distance=far_distance) == 0
-    if int(far_from_nuclei.sum()) >= max(100, int(0.005 * mask.size)):
-        background = float(np.median(yap[far_from_nuclei]))
-        background_method = "median of pixels farther than 1.5 median nuclear diameters from segmented nuclei"
-        background_n_pixels = int(far_from_nuclei.sum())
-    else:
-        background = float(np.percentile(yap, 1))
-        background_method = "1st percentile fallback because cell-free region was too small"
-        background_n_pixels = int(mask.size)
-
-    rows: list[dict] = []
-    for prop in regionprops(mask):
-        label = int(prop.label)
-        nuclear_values = yap[mask == label].astype(float)
-        ring_values = yap[ring_labels == label].astype(float)
-        nucleus_median = float(np.median(nuclear_values))
-        ring_median = float(np.median(ring_values)) if len(ring_values) else np.nan
-        nucleus_corrected = nucleus_median - background
-        ring_corrected = ring_median - background if np.isfinite(ring_median) else np.nan
-        coverage_pass = bool(
-            len(ring_values) >= 20 and len(ring_values) >= 0.20 * len(nuclear_values)
-        )
-        valid = bool(
-            len(ring_values) >= 20
-            and np.isfinite(ring_corrected)
-            and ring_corrected > 0
-            and nucleus_corrected > 0
-        )
-        ratio = float(nucleus_corrected / ring_corrected) if valid else np.nan
-        rows.append(
-            {
-                "cell_id": f"{item.image_id}__cell_{label:05d}",
-                "image_id": item.image_id,
-                "label": label,
-                "posthoc_yap_nuclear_median_raw": nucleus_median,
-                "posthoc_yap_perinuclear_median_raw": ring_median,
-                "posthoc_yap_background": background,
-                "posthoc_yap_nuclear_median_bg_corrected": nucleus_corrected,
-                "posthoc_yap_perinuclear_median_bg_corrected": ring_corrected,
-                "posthoc_yap_nuclear_perinuclear_ratio": ratio,
-                "posthoc_yap_log2_nuclear_perinuclear_ratio": float(np.log2(ratio)) if valid else np.nan,
-                "posthoc_yap_ring_area_px": int(len(ring_values)),
-                "posthoc_yap_ring_to_nucleus_area": float(len(ring_values) / len(nuclear_values)),
-                "posthoc_yap_ratio_valid": valid,
-                "posthoc_yap_ring_coverage_pass": coverage_pass,
-                "posthoc_yap_inner_gap_px": inner_gap_px,
-                "posthoc_yap_outer_distance_px": outer_distance_px,
-                "posthoc_yap_background_method": background_method,
-            }
-        )
-    info = {
-        "image_id": item.image_id,
-        "background": background,
-        "background_method": background_method,
-        "background_n_pixels": background_n_pixels,
-        "median_nuclear_diameter_px": median_diameter,
-        "inner_gap_px": inner_gap_px,
-        "outer_distance_px": outer_distance_px,
-    }
-    return pd.DataFrame(rows), ring_labels, info
+    background_roi = None
+    if background_roi_dir is not None:
+        roi_path = background_roi_dir / f"{item.image_id}_background.png"
+        if roi_path.exists():
+            background_roi = np.asarray(Image.open(roi_path).convert("L")) > 0
+    return measure_array(yap, mask, item.image_id, config, background_roi)
 
 
 def phenotype_colors(labels) -> dict[str, tuple]:
@@ -494,8 +428,13 @@ def phenotype_colors(labels) -> dict[str, tuple]:
 
 
 def save_ring_qc_overlay(
-    item: YAPImageSet, mask_path: Path, ring_labels: np.ndarray, info: dict, path: Path
+    item: YAPImageSet, mask_path: Path, ring_labels: np.ndarray, info: dict, path: Path,
+    measurements: pd.DataFrame | None = None,
 ) -> None:
+    if measurements is not None:
+        save_sampling_figure(load_gray(item.yap_org_path), np.load(mask_path), ring_labels,
+                             measurements, info, path)
+        return
     yap = CORE.normalize_to_uint8(load_gray(item.yap_org_path))
     base = np.stack([yap, yap, yap], axis=-1).astype(float)
     ring = ring_labels > 0
@@ -540,39 +479,12 @@ def save_phenotype_overlay(
 
 
 def save_yap_ratio_overlay(
-    item: YAPImageSet, mask_path: Path, result_df: pd.DataFrame, path: Path
+    item: YAPImageSet, mask_path: Path, result_df: pd.DataFrame, path: Path, raw: bool = False
 ) -> None:
-    mask = np.load(mask_path)
-    base = np.asarray(Image.open(item.merge_path).convert("RGB"), dtype=np.uint8)
-    sub = result_df[result_df["image_id"].eq(item.image_id)]
-    value_map = np.full(int(mask.max()) + 1, np.nan, dtype=float)
-    for row in sub.itertuples(index=False):
-        value_map[int(row.label)] = float(row.posthoc_yap_log2_nuclear_perinuclear_ratio)
-    values = value_map[mask]
-    valid_values = sub["posthoc_yap_log2_nuclear_perinuclear_ratio"].dropna().to_numpy(dtype=float)
-    if len(valid_values):
-        limit = max(0.5, float(np.nanpercentile(np.abs(valid_values), 95)))
-    else:
-        limit = 1.0
-    cmap = plt.get_cmap("coolwarm")
-    norm = Normalize(vmin=-limit, vmax=limit)
-    overlay = base.astype(float)
-    valid = np.isfinite(values) & (mask > 0)
-    overlay[valid] = 0.45 * overlay[valid] + 0.55 * (cmap(norm(values[valid]))[:, :3] * 255.0)
-    fig, ax = plt.subplots(figsize=(12.5, 9.0))
-    ax.imshow(np.clip(overlay, 0, 255).astype(np.uint8))
-    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-    fig.colorbar(scalar, ax=ax, fraction=0.035, pad=0.02, label="post-hoc log2(YAP nuclear/perinuclear)")
-    ax.set_title(
-        f"{experimental_group_display(item.experimental_group_label)}, "
-        f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}: YAP localization\n"
-        "Continuous post-hoc characterization; excluded from preprocessing, UMAP and GMM"
-    )
-    ax.axis("off")
-    fig.tight_layout()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
+    save_ratio_figure(np.asarray(Image.open(item.merge_path).convert("RGB")), np.load(mask_path),
+                      result_df[result_df["image_id"].eq(item.image_id)],
+                      f"{experimental_group_display(item.experimental_group_label)}, "
+                      f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}", path, raw=raw)
 
 
 def save_umap_plots(result_df: pd.DataFrame, probability_columns: list[str], figures_dir: Path) -> None:
@@ -675,7 +587,9 @@ def save_summary_plots(result_df: pd.DataFrame, feature_columns: list[str], figu
                 labels.append(f"{experimental_group}\n{density / 1000:g}k")
             pos += 1
         pos += 1
-    box = ax.boxplot(data, positions=positions, widths=0.7, patch_artist=True, showfliers=False)
+    box = ax.boxplot(data, positions=positions, widths=0.7, patch_artist=True, showfliers=False) if data else {"boxes": []}
+    if not data:
+        ax.text(0.5, 0.5, "No defined background-corrected YAP ratios", transform=ax.transAxes, ha="center")
     palette = {"Ctrl": "#999999", "HA1": "#4c9bd6", "HA2": "#f5a44a"}
     for patch, label in zip(box["boxes"], labels):
         patch.set_facecolor(palette[label.split("\n")[0]])
@@ -952,19 +866,23 @@ def run(args: argparse.Namespace) -> None:
 
     # The complete morphology model is finalized before YAP pixels are opened.
     stage("post-hoc YAP nuclear/perinuclear measurement")
+    yap_config = load_config(getattr(args, "yap_qc_config", None))
     yap_tables = []
     ring_info = []
     ring_labels_by_image: dict[str, np.ndarray] = {}
     for item in selected_sets:
-        table, ring_labels, info = measure_yap_posthoc(item, mask_paths[item.image_id])
+        table, ring_labels, info = measure_yap_posthoc(item, mask_paths[item.image_id], yap_config,
+                                                    getattr(args, "yap_background_roi_dir", None))
         yap_tables.append(table)
         ring_info.append(info)
         ring_labels_by_image[item.image_id] = ring_labels
-        save_ring_qc_overlay(item, mask_paths[item.image_id], ring_labels, info, ring_qc_dir / f"{item.image_id}_ring_qc.png")
+        save_ring_qc_overlay(item, mask_paths[item.image_id], ring_labels, info, ring_qc_dir / f"{item.image_id}_ring_qc.png", table)
     yap_df = pd.concat(yap_tables, ignore_index=True)
     yap_df.to_csv(tables_dir / "yap_nuclear_perinuclear_measurements.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(ring_info).to_csv(tables_dir / "yap_ring_and_background_qc.csv", index=False, encoding="utf-8-sig")
     result_df = result_df.merge(yap_df, on=["cell_id", "image_id", "label"], how="left", validate="one_to_one")
+    qc_summary(result_df).to_csv(tables_dir / "yap_technical_qc_summary.csv", index=False, encoding="utf-8-sig")
+    save_qc_summary_figure(result_df, figures_dir / "yap_qc_summary.png")
 
     selection.to_csv(tables_dir / "gmm_model_selection.csv", index=False, encoding="utf-8-sig")
     CORE.save_selection_plot(selection, selected_k, "YAP localization dataset", args.fit_magnification, figures_dir / "gmm_model_selection.png")
@@ -975,6 +893,8 @@ def run(args: argparse.Namespace) -> None:
     for item in selected_sets:
         save_phenotype_overlay(item, mask_paths[item.image_id], result_df, phenotype_overlay_dir / f"{item.image_id}_phenotypes.png")
         save_yap_ratio_overlay(item, mask_paths[item.image_id], result_df, yap_overlay_dir / f"{item.image_id}_yap_ratio.png")
+        save_yap_ratio_overlay(item, mask_paths[item.image_id], result_df,
+                              figures_dir / "yap_ratio_raw_uncorrected" / f"{item.image_id}_yap_ratio_raw.png", raw=True)
 
     result_df.to_csv(tables_dir / "model_a_single_cell_results.csv", index=False, encoding="utf-8-sig")
     for table_name, table in build_descriptive_tables(result_df).items():
@@ -1025,6 +945,8 @@ def run(args: argparse.Namespace) -> None:
         "n_segmented_cells": len(all_features),
         "n_qc_cells": len(result_df),
         "n_valid_posthoc_yap_ratios": valid_yap,
+        "n_yap_sampling_available": int(result_df["posthoc_yap_sampling_valid"].sum()),
+        "n_raw_uncorrected_yap_ratios": int(result_df["posthoc_yap_raw_ratio_valid"].sum()),
         "model_feature_columns": feature_columns,
         "preprocessing": preprocess_info,
         "gmm": {
@@ -1043,10 +965,14 @@ def run(args: argparse.Namespace) -> None:
             "coordinate_source": "PCA1/2 validation placeholder" if args.skip_umap else "UMAP",
         },
         "posthoc_yap": {
+            "algorithm_version": ALGORITHM_VERSION,
             "measurement": "background-corrected nuclear median / non-overlapping perinuclear-ring median",
             "classification_threshold": "none; continuous ratio retained",
-            "ring_width_rule": "inner gap 0.08 and outer distance 0.35 times per-image median nuclear equivalent diameter",
-            "background_rule": "cell-free-region median when available; otherwise explicitly flagged 1st-percentile estimate",
+            "ring_width_rule": "default inner gap 0; outer distance 0.20 median nuclear diameter; all segmented DAPI nuclei excluded; 0.35 wide-ring sensitivity saved",
+            "background_rule": "user cell-free ROI or inferred far-from-nuclei median + robust noise; insufficient background gives NaN, no percentile fallback",
+            "qc_config": yap_config.__dict__,
+            "qc_interpretation": "any nonempty nuclear-excluded ring measured; coverage, clipping and noise are warnings only; ratio_valid means corrected ratio is mathematically available, not validated",
+            "raw_ratios": "stored and plotted separately; no background fallback or mixing with corrected ratios",
             "limitations": "perinuclear enrichment proxy, not a true whole-cell cytoplasmic measurement; no membrane/cytoplasm marker",
             "used_for_preprocessing_umap_or_gmm": False,
         },

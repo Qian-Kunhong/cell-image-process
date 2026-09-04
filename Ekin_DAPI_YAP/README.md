@@ -11,17 +11,16 @@ This workflow is intentionally separate from the OCT4/BASC workflow.
 - Only DAPI-derived nuclear morphology, DAPI intensity, and spatial features
   enter preprocessing, PCA, UMAP, or GMM.
 - YAP/AF488 pixels are not opened until GMM fitting and UMAP are complete.
-- YAP is retained as a continuous, background-corrected nuclear/perinuclear
-  enrichment ratio. No YAP-positive/negative threshold is invented.
+- YAP is retained as continuous nuclear/perinuclear measurements. Raw and
+  background-corrected ratios are separate. No YAP-positive/negative threshold is invented.
 - The perinuclear ring is a proxy because these images have no membrane or
   cytoplasmic marker. It must not be described as a true whole-cell cytoplasm.
-- YAP background is the median of a sufficiently large cell-free region. Dense
-  fields without such a region use an explicitly flagged first-percentile
-  estimate; no cross-image exposure correction is applied.
-- Ratios require at least 20 non-overlapping perinuclear pixels. A separate
-  high-coverage flag records whether the ring area is at least 20% of nuclear
-  area, so dense-colony measurements remain available without hiding their
-  lower spatial support.
+- YAP v3 uses an explicitly inferred far-from-nuclei background (optional supplied ROI)
+  with robust noise estimation. Insufficient background gives NaN for corrected ratios;
+  the old first-percentile fallback survives only in legacy audit columns.
+- Every nonempty DAPI-excluded sampling region is measured, with a default minimum
+  of one pixel. Area, angle, noise and clipping are warnings, not hard gates.
+  `ratio_valid` means a positive corrected ratio is available, not quality validation.
 - The supplied experimental design defines `Ctrl` as Control (No HA), `HA1` as
   HA-1 (72 h, 2.5 nM), and `HA2` as HA-2 (48 h, 5 nM).
 - Folder codes `2.5`, `5`, `7.5`, and `10` denote seeding densities of
@@ -42,6 +41,33 @@ This workflow is intentionally separate from the OCT4/BASC workflow.
 - merged RGB PNG: display only.
 
 The files are 8-bit PNG exports rather than microscope-native raw data.
+
+## YAP 测量算法 v3：DAPI 核排除、允许少量像素
+
+按用户要求，不设人工验证前置步骤。只要有核外像素就记录强度，默认最低 1 像素；取消额外核外缓冲带，只屏蔽所有 DAPI 实际分割核。扩张像素按最近核唯一分配，不包含邻核或重复归属。原 v2 面积/角度等严格条件降为提示，不再筛掉测量。
+
+详见 [YAP_RATIO_METHOD.md](YAP_RATIO_METHOD.md)：论文依据、公式、默认参数、选择偏差及所有输出字段说明。
+
+已有结果不需要重跑 Cellpose / UMAP / GMM。PyCharm 中直接运行 **`refresh_yap_posthoc.py`**，默认重测 `outputs/composite/40x/all_fields`，结果保存到其下新建的 `yap_dapi_excluded_v3_<时间戳>` 子目录。旧图、旧表和原始 mask 均不覆盖。脚本顶部 `MAGNIFICATION` / `FEATURE_SET` 可修改；没有对应旧模型时，应先运行主入口生成模型。
+
+```powershell
+& 'C:\Users\dodos\miniforge3\envs\cellpose\python.exe' .\refresh_yap_posthoc.py
+```
+
+重测入口只替换 `posthoc_yap_` 列，核对其余特征、元数据、UMAP/PCA、主导表型、全部 GMM 后验逐行不变，并对原始结果文件和 mask 做 SHA256 校验。新主流程 `run_baseline.py` / `run_composite.py` 也已调用 v3。
+
+优先查看：
+
+- `figures/yap_ratio_raw_uncorrected/`：未扣背景比值，背景不足也能保留，但不可与扣背景比值混用；
+- `figures/yap_ratio_overlays/`：扣背景比值，背景不足/分母非正为灰叉，不表示细胞被 DAPI 模型排除；
+- `figures/v1_v3_comparison/`：旧宽环、新核排除采样的校正/未校正比值对照；
+- `figures/ring_qc/`：绿色是实际取样像素，蓝色是全部核边界；
+- `figures/yap_qc_summary.png`：扣背景比值分布，以及原始/校正比值各自可用比例；
+- `tables/yap_technical_qc_summary.csv`、`yap_qc_reason_counts.csv`：取样与校正比值可用性；
+- `tables/yap_quality_warning_counts.csv`：低像素数、角度、噪声等提示，仅重测入口导出；
+- `refresh_info.json`：参数与模型/原文件不变验证。
+
+没有背景时继续输出核/核外原始强度与未校正比值，不借其他图背景、不偷偷用原始比值填入校正列。原有 `--yap-background-roi-dir` 接口仍保留，但非必需，本次不需要人工验证或画 ROI。质量提示不改变 DAPI 模型。核排除以已有 DAPI 分割为准，不保证排除漏分核，也不能确认邻细胞胞质的真实边界。
 
 ## Run the 40x trial
 
