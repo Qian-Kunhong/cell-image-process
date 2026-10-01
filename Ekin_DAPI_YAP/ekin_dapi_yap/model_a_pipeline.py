@@ -24,20 +24,26 @@ from skimage.measure import regionprops
 from skimage.segmentation import expand_labels, find_boundaries
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from summarize_group_differences import build_descriptive_tables
-from phenotype_display import save_clear_phenotypes
-from yap_ratio_qc import ALGORITHM_VERSION, build_ring_labels, load_config, measure_array, qc_summary
-from yap_ratio_display import save_ratio_figure, save_sampling_figure, save_qc_summary_figure
+from .summarize_group_differences import build_descriptive_tables
+from .phenotype_display import save_clear_phenotypes
+from .yap_ratio_qc import ALGORITHM_VERSION, build_ring_labels, load_config, measure_array, qc_summary
+from .yap_ratio_display import save_ratio_figure, save_sampling_figure, save_qc_summary_figure
 
 
 DEFAULT_DATA_ROOT = Path(r"E:\Kino-oka Lab\Immunostaining Data_Ekin\2307YapLocalizationImmuno")
-DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent / "outputs" / "all_40x_trial"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_ROOT = (
+    PROJECT_ROOT
+    / "outputs" / "composite_no_dapi_intensity" / "40x" / "all_fields"
+)
 FOLDER_PATTERN = re.compile(
     r"^(?P<experimental_group>Ctrl|HA1|HA2)-(?P<seeding_density_code>2_5|5|7_5|10)-"
-    r"(?P<magnification>10|20|40)-Image Export-(?P<export_index>\d+)$",
+    r"(?P<magnification>40)-Image Export-(?P<export_index>\d+)$",
     flags=re.IGNORECASE,
 )
 EXPERIMENTAL_GROUP_ORDER = {"Ctrl": 0, "HA1": 1, "HA2": 2}
+# Experimental conditions use a separate visual key from morphology phenotypes.
+EXPERIMENTAL_GROUP_COLORS = {"Ctrl": "#171717", "HA1": "#D000B5", "HA2": "#00B8C4"}
 EXPERIMENTAL_GROUP_METADATA = {
     "Ctrl": {
         "experimental_group_description": "Control (No HA)",
@@ -64,9 +70,9 @@ SEEDING_DENSITY_CELLS_PER_CM2 = {
 
 
 def load_model_a_core():
-    parent = Path(__file__).resolve().parent.parent
+    repository_root = PROJECT_ROOT.parent
     candidates = [
-        parent / "shared" / "dapi_model_a.py",
+        repository_root / "shared" / "dapi_model_a.py",
     ]
     core_path = next((path for path in candidates if path.exists()), None)
     if core_path is None:
@@ -109,20 +115,21 @@ def parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
-    parser.add_argument("--fit-magnification", default="40x")
     parser.add_argument("--cpu", action="store_true", help="Run Cellpose on CPU.")
     parser.add_argument("--reuse-masks", action="store_true")
     parser.add_argument(
         "--skip-umap", action="store_true",
         help="Validation/debug mode: skip visualization-only UMAP and use PCA1/2 as plotting coordinates.",
     )
-    parser.add_argument("--feature-set", choices=("baseline", "composite"), default="composite")
     parser.add_argument("--edge-buffer-px", type=int, default=2,
                         help="Exclude nuclei whose mask is within this many pixels of the image edge (default: 2).")
     parser.add_argument("--yap-qc-config", type=Path, help="Optional JSON overrides for post-hoc YAP QC only.")
     parser.add_argument("--yap-background-roi-dir", type=Path,
                         help="Optional binary PNG background ROIs named <image_id>_background.png; nonzero = cell-free.")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.fit_magnification = "40x"
+    args.feature_set = "composite"
+    return args
 
 
 def json_ready(value):
@@ -487,24 +494,60 @@ def save_yap_ratio_overlay(
                       f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}", path, raw=raw)
 
 
-def save_umap_plots(result_df: pd.DataFrame, probability_columns: list[str], figures_dir: Path) -> None:
+def save_square_umap_scatter_plots(result_df: pd.DataFrame, figures_dir: Path) -> dict:
+    """Redraw the two categorical UMAP plots; no embedding/model recomputation."""
     magnification = fitted_magnification(result_df)
     colors = phenotype_colors(result_df["dominant_phenotype"])
-    fig, ax = plt.subplots(figsize=(7.6, 6.5))
-    for name, sub in result_df.groupby("dominant_phenotype"):
-        ax.scatter(sub["umap_1"], sub["umap_2"], s=10, alpha=0.70, color=colors[name], label=name)
-    ax.set_title(f"{magnification} pooled dominant morphology phenotypes\nDAPI-only UMAP/GMM; YAP excluded")
-    ax.set_xlabel("UMAP 1")
-    ax.set_ylabel("UMAP 2")
-    ax.legend(
-        markerscale=1.5,
-        loc="upper left",
-        bbox_to_anchor=(1.01, 1.0),
-        borderaxespad=0.0,
-    )
-    fig.tight_layout(rect=(0.0, 0.0, 0.78, 1.0))
-    fig.savefig(figures_dir / "umap_dominant_phenotype.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
+    xy = result_df[["umap_1", "umap_2"]].to_numpy(dtype=float)
+    if not len(xy) or not np.isfinite(xy).all():
+        raise ValueError("Square UMAP plots require finite, nonempty existing coordinates")
+    midpoint = (xy.min(axis=0) + xy.max(axis=0)) / 2
+    span = max(float(np.ptp(xy, axis=0).max()), 1e-6) * 1.10
+    limits = [(float(center-span/2), float(center+span/2)) for center in midpoint]
+    group_colors = EXPERIMENTAL_GROUP_COLORS
+    layouts = {}
+    for mode, filename in (
+        ("phenotype", "umap_dominant_phenotype.png"),
+        ("ha_group", "umap_posthoc_ha_experimental_group.png"),
+    ):
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_axes([0.14, 0.20, 0.72, 0.72])
+        if mode == "phenotype":
+            for name, sub in result_df.groupby("dominant_phenotype"):
+                ax.scatter(sub["umap_1"], sub["umap_2"], s=10, alpha=.70, color=colors[name], label=name)
+            title = f"{magnification} pooled dominant morphology phenotypes\nDAPI-only UMAP/GMM; YAP excluded"
+            legend_columns = min(3, len(colors))
+        else:
+            for group in ["Ctrl", "HA1", "HA2"]:
+                sub = result_df[result_df["experimental_group_label"].eq(group)]
+                ax.scatter(sub["umap_1"], sub["umap_2"], s=10, alpha=.90,
+                           color=group_colors[group], label=experimental_group_display(group))
+            title = f"{magnification} post-hoc HA experimental-group distribution\non DAPI-only UMAP"
+            legend_columns = 1
+        ax.set(xlabel="UMAP 1", ylabel="UMAP 2", xlim=limits[0], ylim=limits[1])
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_title(title, fontsize=14, pad=14)
+        ax.set_xlabel("UMAP 1", fontsize=12)
+        ax.set_ylabel("UMAP 2", fontsize=12)
+        legend = fig.legend(*ax.get_legend_handles_labels(), loc="lower center", bbox_to_anchor=(.5, .025),
+                            ncol=legend_columns, markerscale=1.5, fontsize=11, frameon=True)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        box, legend_box = ax.get_window_extent(renderer), legend.get_window_extent(renderer)
+        if not np.isclose(box.width, box.height) or legend_box.y1 >= box.y0:
+            raise AssertionError("UMAP axes must be square and legend must stay outside")
+        layouts[filename] = dict(canvas_pixels=[2200, 2200], axes_box_aspect=float(box.height/box.width),
+                                 xlim=list(ax.get_xlim()), ylim=list(ax.get_ylim()), legend_outside_axes=True)
+        # Do not use bbox_inches='tight': it would crop the square canvas to a rectangle.
+        with plt.rc_context({"savefig.bbox": None}):
+            fig.savefig(figures_dir / filename, dpi=220)
+        plt.close(fig)
+    return layouts
+
+
+def save_umap_plots(result_df: pd.DataFrame, probability_columns: list[str], figures_dir: Path) -> None:
+    magnification = fitted_magnification(result_df)
+    save_square_umap_scatter_plots(result_df, figures_dir)
 
     n = len(probability_columns)
     ncols = min(3, n)
@@ -531,27 +574,6 @@ def save_umap_plots(result_df: pd.DataFrame, probability_columns: list[str], fig
     fig.savefig(figures_dir / "umap_membership_probabilities.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
-    experimental_group_colors = {"Ctrl": "#555555", "HA1": "#1f77b4", "HA2": "#ff7f0e"}
-    fig, ax = plt.subplots(figsize=(7.6, 6.5))
-    for experimental_group in ["Ctrl", "HA1", "HA2"]:
-        sub = result_df[result_df["experimental_group_label"].eq(experimental_group)]
-        ax.scatter(
-            sub["umap_1"],
-            sub["umap_2"],
-            s=10,
-            alpha=0.65,
-            color=experimental_group_colors[experimental_group],
-            label=experimental_group_display(experimental_group),
-        )
-    ax.set_title("Post-hoc HA experimental-group distribution on DAPI-only UMAP")
-    ax.set_xlabel("UMAP 1")
-    ax.set_ylabel("UMAP 2")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(rect=(0.0, 0.0, 0.73, 1.0))
-    fig.savefig(figures_dir / "umap_posthoc_ha_experimental_group.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-
 def save_summary_plots(result_df: pd.DataFrame, feature_columns: list[str], figures_dir: Path) -> None:
     feature_means = result_df.groupby("dominant_phenotype")[feature_columns].mean()
     overall_mean = result_df[feature_columns].mean()
@@ -567,43 +589,68 @@ def save_summary_plots(result_df: pd.DataFrame, feature_columns: list[str], figu
     fig.savefig(figures_dir / "phenotype_feature_heatmap.png", dpi=220)
     plt.close(fig)
 
-    valid = result_df[result_df["posthoc_yap_ratio_valid"]].copy()
-    fig, ax = plt.subplots(figsize=(8.8, 5.8))
-    positions = []
-    data = []
-    labels = []
+    save_yap_condition_boxplot(result_df, figures_dir)
+    save_yap_condition_boxplot(result_df, figures_dir, raw=False)
+
+
+def save_yap_condition_boxplot(result_df: pd.DataFrame, figures_dir: Path, raw: bool = True) -> pd.DataFrame:
+    """One ratio definition for ALL conditions; never fill missing corrected ratios with raw values."""
+    column = ("posthoc_yap_raw_log2_nuclear_perinuclear_ratio" if raw
+              else "posthoc_yap_log2_nuclear_perinuclear_ratio")
+    mode = "UNCORRECTED" if raw else "Background-corrected"
+    fig, ax = plt.subplots(figsize=(13.2, 7.4))
+    positions, data, labels, box_groups, rows = [], [], [], [], []
+    tick_positions = []
     pos = 1
+    palette = EXPERIMENTAL_GROUP_COLORS
     density_order = [2_500.0, 5_000.0, 7_500.0, 10_000.0]
     for experimental_group in ["Ctrl", "HA1", "HA2"]:
         for density in density_order:
-            values = valid.loc[
-                valid["experimental_group_label"].eq(experimental_group)
-                & valid["seeding_density_cells_per_cm2"].eq(density),
-                "posthoc_yap_log2_nuclear_perinuclear_ratio",
-            ].dropna().to_numpy()
+            subset = result_df.loc[
+                result_df["experimental_group_label"].eq(experimental_group)
+                & result_df["seeding_density_cells_per_cm2"].eq(density)]
+            values = pd.to_numeric(subset[column], errors="coerce").to_numpy(dtype=float)
+            values = values[np.isfinite(values)]
+            tick_positions.append(pos)
+            labels.append(f"{experimental_group}\n{density / 1000:g}k\nn={len(values)}/{len(subset)}")
+            rows.append(dict(experimental_group_label=experimental_group,
+                             seeding_density_cells_per_cm2=density,
+                             ratio_definition=mode, source_column=column,
+                             n_model_cells=len(subset), n_available=len(values),
+                             n_image_fields=subset["image_id"].nunique(),
+                             median_log2_ratio=float(np.median(values)) if len(values) else np.nan))
             if len(values):
                 positions.append(pos)
                 data.append(values)
-                labels.append(f"{experimental_group}\n{density / 1000:g}k")
+                box_groups.append(experimental_group)
+            else:
+                ax.text(pos, .04, "NA", transform=ax.get_xaxis_transform(), ha="center", color="gray")
             pos += 1
         pos += 1
     box = ax.boxplot(data, positions=positions, widths=0.7, patch_artist=True, showfliers=False) if data else {"boxes": []}
-    if not data:
-        ax.text(0.5, 0.5, "No defined background-corrected YAP ratios", transform=ax.transAxes, ha="center")
-    palette = {"Ctrl": "#999999", "HA1": "#4c9bd6", "HA2": "#f5a44a"}
-    for patch, label in zip(box["boxes"], labels):
-        patch.set_facecolor(palette[label.split("\n")[0]])
+    for patch, group in zip(box["boxes"], box_groups):
+        patch.set_facecolor(palette[group])
         patch.set_alpha(0.75)
     ax.axhline(0.0, color="black", linestyle=":", linewidth=1)
-    ax.set_xticks(positions, labels=labels)
-    ax.set_ylabel("post-hoc log2(YAP nuclear/perinuclear)")
+    ax.set_xticks(tick_positions, labels=labels, fontsize=9)
+    ax.set_xlim(.4, tick_positions[-1] + .6)
+    ax.set_xlabel("HA experimental group / seeding density (thousands of cells/cm²)")
+    ax.set_ylabel(f"{mode} log2(YAP nuclear/perinuclear)\nMedian intensity within each sampling region")
     ax.set_title(
-        "YAP localization by HA experimental group and seeding density\n"
-        "Continuous post-hoc characterization; no YAP-derived class threshold"
+        "YAP localization by HA group and seeding density\n"
+        f"{mode} ratios for all conditions; post-hoc only"
     )
-    fig.tight_layout()
-    fig.savefig(figures_dir / "yap_localization_by_ha_group_and_seeding_density.png", dpi=220)
+    note = "No background subtraction; additive background can affect comparisons." if raw else "Missing background gives NA; no substitution with uncorrected values."
+    fig.text(.5, .025, note + "\n"
+             "n = available / DAPI-model cells. Boxes: IQR; line: median; whiskers: 1.5×IQR; outliers hidden.\n"
+             "Cell-level descriptive distributions, not replicate-level inference; perinuclear ring is a cytoplasmic proxy.",
+             ha="center", va="bottom", fontsize=9)
+    fig.tight_layout(rect=(0, .12, 1, 1))
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    suffix = "" if raw else "_background_corrected"
+    fig.savefig(figures_dir / f"yap_localization_by_ha_group_and_seeding_density{suffix}.png", dpi=220)
     plt.close(fig)
+    return pd.DataFrame(rows)
 
 
 def save_group_and_seeding_density_plots(result_df: pd.DataFrame, figures_dir: Path) -> None:
@@ -660,6 +707,13 @@ def save_group_and_seeding_density_plots(result_df: pd.DataFrame, figures_dir: P
     fig.savefig(figures_dir / "umap_posthoc_seeding_density_within_ha_group.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
+    save_phenotype_composition_plot(result_df, figures_dir)
+
+
+def save_phenotype_composition_plot(result_df: pd.DataFrame, figures_dir: Path) -> None:
+    """Plot composition with cell counts above bars and concise group labels below."""
+    magnification = fitted_magnification(result_df)
+    density_order = [2_500.0, 5_000.0, 7_500.0, 10_000.0]
     phenotype_order = sorted(
         result_df["dominant_phenotype"].unique(), key=lambda value: int(str(value).split()[-1])
     )
@@ -680,18 +734,25 @@ def save_group_and_seeding_density_plots(result_df: pd.DataFrame, figures_dir: P
             values = fractions[phenotype].to_numpy(dtype=float)
             ax.bar(x, values, bottom=bottom, color=colors[phenotype], label=phenotype)
             bottom += values
+        totals = counts.sum(axis=1).to_numpy(dtype=int)
         ax.set_xticks(x, labels=[f"{value / 1000:g}k" for value in density_order])
-        ax.set_xlabel("Seeding density (cells/cm²)")
-        ax.set_title(experimental_group_display(experimental_group))
-        for xpos, total in zip(x, counts.sum(axis=1).to_numpy(dtype=int)):
-            ax.text(xpos, 1.015, f"n={total}", ha="center", va="bottom", fontsize=8)
+        metadata = EXPERIMENTAL_GROUP_METADATA[experimental_group]
+        group_label = ("Control (No HA)" if experimental_group == "Ctrl" else
+                       f"HA-{experimental_group[-1]} ({metadata['ha_exposure_h']:g}h, "
+                       f"{metadata['ha_concentration_nM']:g}nM)")
+        ax.set_xlabel(group_label, fontsize=11, labelpad=10)
+        ax.set_ylim(0, 1)
+        for xpos, total in zip(x, totals):
+            ax.text(xpos, 1.015, f"n={total}", transform=ax.get_xaxis_transform(),
+                    ha="center", va="bottom", fontsize=8, clip_on=False)
     axes[0].set_ylabel("Morphology phenotype fraction")
     axes[-1].legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), title="DAPI-only phenotype")
     fig.suptitle(
         "Morphology phenotype composition across 3 HA groups × 4 seeding densities\n"
         f"Descriptive only: one {magnification} image field per combination"
     )
-    fig.tight_layout()
+    fig.supxlabel("Seeding density (cells/cm²)", y=.015, fontsize=10)
+    fig.tight_layout(rect=(0, .07, 1, .98))
     fig.savefig(figures_dir / "phenotype_composition_by_ha_group_and_seeding_density.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
@@ -776,6 +837,7 @@ def run(args: argparse.Namespace) -> None:
     def stage(message: str) -> None:
         print(f"[stage +{time.perf_counter() - started:7.1f}s] {message}", flush=True)
 
+    stage(f"YAP post-hoc algorithm: {ALGORITHM_VERSION}; pipeline: {Path(__file__).resolve()}")
     output_root = args.output_root.resolve()
     tables_dir = output_root / "tables"
     figures_dir = output_root / "figures"
@@ -811,21 +873,30 @@ def run(args: argparse.Namespace) -> None:
     stage("segmentation complete")
     all_features = extract_all_dapi_features(selected_sets, mask_paths, edge_buffer_px=args.edge_buffer_px)
     all_features.to_csv(tables_dir / "dapi_features_all_cells.csv", index=False, encoding="utf-8-sig")
-    qc_summary = (
+    dapi_qc_summary = (
         all_features.groupby(
             ["experimental_group_label", "seeding_density_cells_per_cm2", "magnification", "image_id"],
             as_index=False,
         )
         .agg(n_segmented=("cell_id", "size"), n_qc_keep=("qc_keep", "sum"))
     )
-    qc_summary["qc_keep_fraction"] = qc_summary["n_qc_keep"] / qc_summary["n_segmented"]
-    qc_summary.to_csv(tables_dir / "qc_summary.csv", index=False, encoding="utf-8-sig")
+    dapi_qc_summary["qc_keep_fraction"] = dapi_qc_summary["n_qc_keep"] / dapi_qc_summary["n_segmented"]
+    dapi_qc_summary.to_csv(tables_dir / "qc_summary.csv", index=False, encoding="utf-8-sig")
     fit_df = all_features[all_features["qc_keep"]].reset_index(drop=True)
     if len(fit_df) < 20:
         raise RuntimeError("Fewer than 20 QC-kept nuclei are available")
 
-    stage(f"preprocessing {len(fit_df)} cells using DAPI-only features")
-    comparison, comparison_artifacts = CORE.compare_feature_models(fit_df)
+    feature_switches = getattr(args, "feature_switches", None)
+    enabled_features, disabled_features = CORE.resolve_model_features(
+        "raw" if args.feature_set == "baseline" else "augmented", feature_switches
+    )
+    stage(f"feature switches: enabled={len(enabled_features)}, disabled={len(disabled_features)}")
+    print("[features enabled] " + ", ".join(enabled_features), flush=True)
+    print("[features disabled] " + (", ".join(disabled_features) if disabled_features else "none"), flush=True)
+    stage(f"preprocessing {len(fit_df)} cells using selected DAPI-derived features")
+    comparison, comparison_artifacts = CORE.compare_feature_models(
+        fit_df, feature_switches=feature_switches
+    )
     selected_feature_set = "raw" if args.feature_set == "baseline" else "augmented"
     scaled, feature_columns, _, raw_labels, raw_probabilities, pca, selection, selected_k = comparison_artifacts[selected_feature_set]
     preprocess_info = comparison[selected_feature_set]["preprocessing"]
@@ -948,6 +1019,8 @@ def run(args: argparse.Namespace) -> None:
         "n_yap_sampling_available": int(result_df["posthoc_yap_sampling_valid"].sum()),
         "n_raw_uncorrected_yap_ratios": int(result_df["posthoc_yap_raw_ratio_valid"].sum()),
         "model_feature_columns": feature_columns,
+        "feature_switches": feature_switches or {name: True for name in CORE.ALL_SWITCHABLE_MODEL_FEATURES},
+        "configured_disabled_model_features": disabled_features,
         "preprocessing": preprocess_info,
         "gmm": {
             "candidate_k": selection["n_clusters"].astype(int).tolist(),

@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 import unittest
 import numpy as np
-import yap_40x_trial as pipeline
+from ekin_dapi_yap import model_a_pipeline as pipeline
 
 
 class EdgeQCTests(unittest.TestCase):

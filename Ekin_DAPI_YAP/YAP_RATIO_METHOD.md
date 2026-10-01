@@ -85,4 +85,4 @@
 
 YAP 代码只在模型完成后调用。`refresh_yap_posthoc.py` 不分割、不做预处理、不拟合 GMM/UMAP；只合并新的 `posthoc_yap_` 列。全部 DAPI 特征、细胞行、元数据、主导表型和每一个后验概率保持不变。旧输出和 mask 通过 SHA256 检查，新结果写入全新目录。
 
-测试：`python -m unittest discover -s Ekin_DAPI_YAP -p "test_*.py" -v`（项目根目录执行）。包括已知比值、真实高比值、半环空白、近零/负分母、缺背景、手工 ROI、图像边缘、裁切、邻核隔离及模型后验不变。
+测试：`python -m unittest discover -s Ekin_DAPI_YAP -p "test_*.py" -v`（仓库根目录执行）。测试文件位于 `Ekin_DAPI_YAP/tests/`，包括已知比值、真实高比值、半环空白、近零/负分母、缺背景、手工 ROI、图像边缘、裁切、邻核隔离及模型后验不变。

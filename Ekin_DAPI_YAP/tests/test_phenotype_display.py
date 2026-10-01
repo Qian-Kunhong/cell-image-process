@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from phenotype_display import categorical_rgb, qc_keep_mask, low_confidence_rows
+from ekin_dapi_yap.phenotype_display import categorical_rgb, qc_keep_mask, low_confidence_rows
 
 
 class DisplayTests(unittest.TestCase):

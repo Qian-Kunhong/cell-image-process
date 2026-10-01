@@ -14,13 +14,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from yap_40x_trial import (YAPImageSet, measure_yap_posthoc, save_ring_qc_overlay,
-                          save_yap_ratio_overlay, save_json, build_descriptive_tables)
-from yap_ratio_qc import ALGORITHM_VERSION, load_config, qc_summary
-from yap_ratio_display import save_comparison_figure, save_qc_summary_figure
+from ekin_dapi_yap.model_a_pipeline import (
+    YAPImageSet, build_descriptive_tables, measure_yap_posthoc, save_json,
+    save_ring_qc_overlay, save_yap_ratio_overlay,
+)
+from ekin_dapi_yap.yap_ratio_qc import ALGORITHM_VERSION, load_config, qc_summary
+from ekin_dapi_yap.yap_ratio_display import save_comparison_figure, save_qc_summary_figure
 
-MAGNIFICATION = "40x"
-FEATURE_SET = "composite"
+DEFAULT_SOURCE_ROOT = (
+    Path(__file__).resolve().parent
+    / "outputs" / "composite_no_dapi_intensity" / "40x" / "all_fields"
+)
 
 
 def sha256(path):
@@ -146,13 +150,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--output-root", type=Path)
-    parser.add_argument("--fit-magnification", default=MAGNIFICATION, choices=["20x", "40x"])
-    parser.add_argument("--feature-set", default=FEATURE_SET, choices=["baseline", "composite"])
     parser.add_argument("--yap-qc-config", type=Path)
     parser.add_argument("--yap-background-roi-dir", type=Path)
     parser.add_argument("--no-figures", action="store_true")
     args = parser.parse_args()
-    source = args.source_root or Path(__file__).resolve().parent / "outputs" / args.feature_set / args.fit_magnification / "all_fields"
+    source = args.source_root or DEFAULT_SOURCE_ROOT
     output = args.output_root or source / ("yap_dapi_excluded_v3_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
     refresh(source, output, load_config(args.yap_qc_config), args.yap_background_roi_dir, not args.no_figures)
 

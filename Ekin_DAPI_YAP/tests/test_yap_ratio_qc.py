@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from skimage.segmentation import expand_labels
 
-from yap_ratio_qc import YAPQCConfig, build_ring_labels, measure_array
+from ekin_dapi_yap.yap_ratio_qc import YAPQCConfig, build_ring_labels, measure_array
 from refresh_yap_posthoc import replace_posthoc
 
 

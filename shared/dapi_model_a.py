@@ -126,6 +126,7 @@ COMPOSITE_MODEL_FEATURES = [
     "neighbor_shape_disagreement",
     "neighborhood_angular_asymmetry",
 ]
+ALL_SWITCHABLE_MODEL_FEATURES = list(dict.fromkeys(MODEL_FEATURES + COMPOSITE_MODEL_FEATURES))
 
 FORBIDDEN_MODEL_TOKENS = (
     "oct4", "oct_4", "oct-4", "af488", "yap", "experimental_group",
@@ -625,10 +626,29 @@ def validate_model_feature_names(feature_columns: Iterable[str]) -> None:
         raise AssertionError(f"OCT4 leakage detected in Model A feature columns: {violations}")
 
 
-def preprocess_features(df: pd.DataFrame, feature_set: str = "augmented") -> tuple[np.ndarray, list[str], dict]:
-    requested = MODEL_FEATURES if feature_set == "raw" else MODEL_FEATURES + COMPOSITE_MODEL_FEATURES
+def resolve_model_features(feature_set: str, feature_switches: dict[str, bool] | None = None) -> tuple[list[str], list[str]]:
     if feature_set not in {"raw", "augmented"}:
         raise ValueError("feature_set must be 'raw' or 'augmented'")
+    switches = {name: True for name in ALL_SWITCHABLE_MODEL_FEATURES}
+    if feature_switches is not None:
+        unknown = sorted(set(feature_switches) - set(switches))
+        if unknown:
+            raise KeyError(f"Unknown Model A feature switches: {unknown}")
+        invalid = sorted(name for name, enabled in feature_switches.items() if not isinstance(enabled, bool))
+        if invalid:
+            raise TypeError(f"Feature switches must be bool: {invalid}")
+        switches.update(feature_switches)
+    candidates = MODEL_FEATURES if feature_set == "raw" else MODEL_FEATURES + COMPOSITE_MODEL_FEATURES
+    requested = [name for name in candidates if switches[name]]
+    disabled = [name for name in candidates if not switches[name]]
+    if len(requested) < 2:
+        raise RuntimeError("Fewer than two Model A features are enabled.")
+    return requested, disabled
+
+
+def preprocess_features(df: pd.DataFrame, feature_set: str = "augmented",
+                        feature_switches: dict[str, bool] | None = None) -> tuple[np.ndarray, list[str], dict]:
+    requested, configured_disabled = resolve_model_features(feature_set, feature_switches)
     missing = [col for col in requested if col not in df.columns]
     if missing:
         raise KeyError(f"Missing Model A feature columns: {missing}")
@@ -660,6 +680,8 @@ def preprocess_features(df: pd.DataFrame, feature_set: str = "augmented") -> tup
         "scaler": "RobustScaler",
         "feature_selection_rule": "explicit existing feature families; no correlation cutoff",
         "feature_set": feature_set,
+        "configured_disabled_features": configured_disabled,
+        "configured_enabled_features": requested,
     }
     return scaled, feature_columns, info
 
@@ -741,11 +763,13 @@ def fit_gmm_with_dynamic_k(
     return best_model, raw_labels, raw_probabilities, pca, selection, best_k
 
 
-def compare_feature_models(df: pd.DataFrame) -> tuple[dict, dict]:
+def compare_feature_models(df: pd.DataFrame, feature_switches: dict[str, bool] | None = None) -> tuple[dict, dict]:
     """Compare raw and augmented models without using post-hoc markers/metadata."""
     reports, artifacts = {}, {}
     for feature_set in ("raw", "augmented"):
-        scaled, columns, prep = preprocess_features(df, feature_set=feature_set)
+        scaled, columns, prep = preprocess_features(
+            df, feature_set=feature_set, feature_switches=feature_switches
+        )
         model, labels, probs, pca, selection, selected_k = fit_gmm_with_dynamic_k(scaled)
         seed_aris = []
         for seed in (7, 19, 73):
@@ -762,9 +786,12 @@ def compare_feature_models(df: pd.DataFrame) -> tuple[dict, dict]:
             "preprocessing": prep,
         }
         artifacts[feature_set] = (scaled, columns, model, labels, probs, pca, selection, selected_k)
-    corr = df[MODEL_FEATURES + COMPOSITE_FEATURES].corr(method="spearman").abs()
+    enabled_raw, _ = resolve_model_features("raw", feature_switches)
+    enabled_augmented, _ = resolve_model_features("augmented", feature_switches)
+    enabled_composites = [name for name in COMPOSITE_MODEL_FEATURES if name in enabled_augmented]
+    corr = df[enabled_raw + enabled_composites].corr(method="spearman").abs()
     reports["augmented"]["composite_max_abs_spearman_with_raw"] = {
-        col: float(corr.loc[col, MODEL_FEATURES].max()) for col in COMPOSITE_FEATURES
+        col: float(corr.loc[col, enabled_raw].max()) for col in enabled_composites
     }
     delta = reports["augmented"]["mean_max_posterior"] - reports["raw"]["mean_max_posterior"]
     reports["conclusion"] = {
@@ -951,7 +978,10 @@ def save_selection_plot(
     magnification: str,
     path: Path,
 ) -> None:
-    fig, ax1 = plt.subplots(figsize=(8.5, 5.5))
+    # Keep the plotting area close to its historical size while reserving a
+    # dedicated right-hand panel for definitions.  This makes the exported
+    # figure self-explanatory when it is copied into a slide by itself.
+    fig, ax1 = plt.subplots(figsize=(12.5, 5.5))
     ax1.plot(selection["n_clusters"], selection["bic"], marker="o", label="BIC")
     ax1.plot(
         selection["n_clusters"],
@@ -975,9 +1005,37 @@ def save_selection_plot(
     ax2.set_ylabel("Silhouette (higher is better)")
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="best")
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
     ax1.set_title(f"{trial_label} {magnification} GMM model selection")
-    fig.tight_layout()
+    glossary = (
+        "HOW TO READ\n\n"
+        "K\nNumber of GMM components\n(statistical phenotypes).\n\n"
+        "BIC\nModel fit with a complexity penalty.\nLower is better.\n\n"
+        "Penalized BIC\nBIC plus an extra penalty for tiny or\nfragmented clusters. Its minimum selects K.\n\n"
+        "Silhouette\nCluster compactness and separation.\nHigher is better.\n\n"
+        "Selected K\nVertical dotted line; chosen by the\nminimum penalized BIC."
+    )
+    fig.text(
+        0.735,
+        0.88,
+        glossary,
+        ha="left",
+        va="top",
+        fontsize=9.5,
+        linespacing=1.15,
+        bbox={"boxstyle": "round,pad=0.7", "facecolor": "#F5F5F5", "edgecolor": "#C8C8C8"},
+    )
+    fig.text(
+        0.735,
+        0.075,
+        "Statistical components are not automatically\nbiological cell types.",
+        ha="left",
+        va="bottom",
+        fontsize=9,
+        color="#555555",
+        style="italic",
+    )
+    fig.subplots_adjust(left=0.075, right=0.665, bottom=0.14, top=0.88)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=220)
     plt.close(fig)
