@@ -1,0 +1,77 @@
+﻿dataset,source_status,role,name,relative_path,absolute_path
+Ekin_DAPI_OCT4,main,entrypoint,day2_trial.py,Ekin_DAPI_OCT4/day2_trial.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\day2_trial.py
+Ekin_DAPI_OCT4,main,entrypoint,run_baseline.py,Ekin_DAPI_OCT4/run_baseline.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_baseline.py
+Ekin_DAPI_OCT4,main,entrypoint,run_composite.py,Ekin_DAPI_OCT4/run_composite.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_composite.py
+Ekin_DAPI_OCT4,main,entrypoint,run_day2_40x.ps1,Ekin_DAPI_OCT4/run_day2_40x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_day2_40x.ps1
+Ekin_DAPI_OCT4,main,entrypoint,run_day4_sample1_20x.ps1,Ekin_DAPI_OCT4/run_day4_sample1_20x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_day4_sample1_20x.ps1
+Ekin_DAPI_OCT4,main,entrypoint,run_day4_sample1_40x.ps1,Ekin_DAPI_OCT4/run_day4_sample1_40x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_day4_sample1_40x.ps1
+Ekin_DAPI_OCT4,main,entrypoint,run_day4_sample2_20x.ps1,Ekin_DAPI_OCT4/run_day4_sample2_20x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_day4_sample2_20x.ps1
+Ekin_DAPI_OCT4,main,entrypoint,run_day4_sample2_40x.ps1,Ekin_DAPI_OCT4/run_day4_sample2_40x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\run_day4_sample2_40x.ps1
+Ekin_DAPI_OCT4,main,test,test_day2_trial.py,Ekin_DAPI_OCT4/test_day2_trial.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_OCT4\test_day2_trial.py
+Ekin_DAPI_YAP,main,analysis_entrypoint,analyze_ha_uniformity.py,Ekin_DAPI_YAP/analyze_ha_uniformity.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\analyze_ha_uniformity.py
+Ekin_DAPI_YAP,main,library,__init__.py,Ekin_DAPI_YAP/ekin_dapi_yap/__init__.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\__init__.py
+Ekin_DAPI_YAP,main,library,model_a_pipeline.py,Ekin_DAPI_YAP/ekin_dapi_yap/model_a_pipeline.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\model_a_pipeline.py
+Ekin_DAPI_YAP,main,library,phenotype_display.py,Ekin_DAPI_YAP/ekin_dapi_yap/phenotype_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\phenotype_display.py
+Ekin_DAPI_YAP,main,analysis_entrypoint,summarize_group_differences.py,Ekin_DAPI_YAP/ekin_dapi_yap/summarize_group_differences.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\summarize_group_differences.py
+Ekin_DAPI_YAP,main,library,yap_ratio_display.py,Ekin_DAPI_YAP/ekin_dapi_yap/yap_ratio_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\yap_ratio_display.py
+Ekin_DAPI_YAP,main,library,yap_ratio_qc.py,Ekin_DAPI_YAP/ekin_dapi_yap/yap_ratio_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\ekin_dapi_yap\yap_ratio_qc.py
+Ekin_DAPI_YAP,main,analysis_entrypoint,evaluate_interpretable_models.py,Ekin_DAPI_YAP/evaluate_interpretable_models.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\evaluate_interpretable_models.py
+Ekin_DAPI_YAP,main,figure_or_posthoc_entrypoint,make_ppt_figures.py,Ekin_DAPI_YAP/make_ppt_figures.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\make_ppt_figures.py
+Ekin_DAPI_YAP,main,figure_or_posthoc_entrypoint,refresh_yap_posthoc.py,Ekin_DAPI_YAP/refresh_yap_posthoc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\refresh_yap_posthoc.py
+Ekin_DAPI_YAP,main,entrypoint,run_40x_analysis.py,Ekin_DAPI_YAP/run_40x_analysis.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\run_40x_analysis.py
+Ekin_DAPI_YAP,main,entrypoint,run_interpretable_phenotypes.py,Ekin_DAPI_YAP/run_interpretable_phenotypes.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\run_interpretable_phenotypes.py
+Ekin_DAPI_YAP,main,test,__init__.py,Ekin_DAPI_YAP/tests/__init__.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\__init__.py
+Ekin_DAPI_YAP,main,test,test_edge_qc.py,Ekin_DAPI_YAP/tests/test_edge_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_edge_qc.py
+Ekin_DAPI_YAP,main,test,test_feature_switches.py,Ekin_DAPI_YAP/tests/test_feature_switches.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_feature_switches.py
+Ekin_DAPI_YAP,main,test,test_ha_uniformity.py,Ekin_DAPI_YAP/tests/test_ha_uniformity.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_ha_uniformity.py
+Ekin_DAPI_YAP,main,test,test_make_ppt_figures.py,Ekin_DAPI_YAP/tests/test_make_ppt_figures.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_make_ppt_figures.py
+Ekin_DAPI_YAP,main,test,test_model_a_pipeline.py,Ekin_DAPI_YAP/tests/test_model_a_pipeline.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_model_a_pipeline.py
+Ekin_DAPI_YAP,main,test,test_phenotype_display.py,Ekin_DAPI_YAP/tests/test_phenotype_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_phenotype_display.py
+Ekin_DAPI_YAP,main,test,test_yap_ratio_qc.py,Ekin_DAPI_YAP/tests/test_yap_ratio_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP\tests\test_yap_ratio_qc.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,analysis_entrypoint,analyze_ha_uniformity.py,Ekin_DAPI_YAP - Doubao/analyze_ha_uniformity.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\analyze_ha_uniformity.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,figure_or_posthoc_entrypoint,make_ppt_figures.py,Ekin_DAPI_YAP - Doubao/make_ppt_figures.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\make_ppt_figures.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,workflow_script,phenotype_display.py,Ekin_DAPI_YAP - Doubao/phenotype_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\phenotype_display.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,figure_or_posthoc_entrypoint,refresh_yap_posthoc.py,Ekin_DAPI_YAP - Doubao/refresh_yap_posthoc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\refresh_yap_posthoc.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,entrypoint,run_all_20x.ps1,Ekin_DAPI_YAP - Doubao/run_all_20x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\run_all_20x.ps1
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,entrypoint,run_all_40x.ps1,Ekin_DAPI_YAP - Doubao/run_all_40x.ps1,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\run_all_40x.ps1
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,entrypoint,run_baseline.py,Ekin_DAPI_YAP - Doubao/run_baseline.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\run_baseline.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,entrypoint,run_composite.py,Ekin_DAPI_YAP - Doubao/run_composite.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\run_composite.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,entrypoint,run_composite_feature_control.py,Ekin_DAPI_YAP - Doubao/run_composite_feature_control.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\run_composite_feature_control.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,analysis_entrypoint,summarize_group_differences.py,Ekin_DAPI_YAP - Doubao/summarize_group_differences.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\summarize_group_differences.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_edge_qc.py,Ekin_DAPI_YAP - Doubao/test_edge_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_edge_qc.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_feature_switches.py,Ekin_DAPI_YAP - Doubao/test_feature_switches.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_feature_switches.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_ha_uniformity.py,Ekin_DAPI_YAP - Doubao/test_ha_uniformity.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_ha_uniformity.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_make_ppt_figures.py,Ekin_DAPI_YAP - Doubao/test_make_ppt_figures.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_make_ppt_figures.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_phenotype_display.py,Ekin_DAPI_YAP - Doubao/test_phenotype_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_phenotype_display.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_yap_40x_trial.py,Ekin_DAPI_YAP - Doubao/test_yap_40x_trial.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_yap_40x_trial.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,test,test_yap_ratio_qc.py,Ekin_DAPI_YAP - Doubao/test_yap_ratio_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\test_yap_ratio_qc.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,workflow_script,yap_40x_trial.py,Ekin_DAPI_YAP - Doubao/yap_40x_trial.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\yap_40x_trial.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,workflow_script,yap_ratio_display.py,Ekin_DAPI_YAP - Doubao/yap_ratio_display.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\yap_ratio_display.py
+Ekin_DAPI_YAP - Doubao,alternate_snapshot,workflow_script,yap_ratio_qc.py,Ekin_DAPI_YAP - Doubao/yap_ratio_qc.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Ekin_DAPI_YAP - Doubao\yap_ratio_qc.py
+extract_docx_text.py,main,workflow_script,extract_docx_text.py,extract_docx_text.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\extract_docx_text.py
+shared,main,library,__init__.py,shared/__init__.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\shared\__init__.py
+shared,main,library,dapi_model_a.py,shared/dapi_model_a.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\shared\dapi_model_a.py
+shared,main,library,entrypoint.py,shared/entrypoint.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\shared\entrypoint.py
+Suzui,main,workflow_script,01_select_focus_and_copy_bf.py,Suzui/DAPI/01_select_focus_and_copy_bf.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\01_select_focus_and_copy_bf.py
+Suzui,main,workflow_script,02_cellpose_segment.py,Suzui/DAPI/02_cellpose_segment.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\02_cellpose_segment.py
+Suzui,main,workflow_script,03-1_qc_filter.py,Suzui/DAPI/03-1_qc_filter.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\03-1_qc_filter.py
+Suzui,main,workflow_script,03_feature_extractior.py,Suzui/DAPI/03_feature_extractior.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\03_feature_extractior.py
+Suzui,main,workflow_script,04-b_adaptive_clustering.py,Suzui/DAPI/04-b_adaptive_clustering.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\04-b_adaptive_clustering.py
+Suzui,main,workflow_script,04-c_deviation_intensity_analysis.py,Suzui/DAPI/04-c_deviation_intensity_analysis.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\04-c_deviation_intensity_analysis.py
+Suzui,main,workflow_script,04_unsupervised_learning.py,Suzui/DAPI/04_unsupervised_learning.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\04_unsupervised_learning.py
+Suzui,main,workflow_script,05-b_relative_batch_normalized.py,Suzui/DAPI/05-b_relative_batch_normalized.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\05-b_relative_batch_normalized.py
+Suzui,main,workflow_script,05_distinguish cell type.py,Suzui/DAPI/05_distinguish cell type.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\05_distinguish cell type.py
+Suzui,main,workflow_script,06_SA.py,Suzui/DAPI/06_SA.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\06_SA.py
+Suzui,main,workflow_script,07_SHAP.py,Suzui/DAPI/07_SHAP.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\07_SHAP.py
+Suzui,main,workflow_script,cluster_xgb_analysis_common.py,Suzui/DAPI/cluster_xgb_analysis_common.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\cluster_xgb_analysis_common.py
+Suzui,main,figure_or_posthoc_entrypoint,make_timelapse_gifs.py,Suzui/DAPI/make_timelapse_gifs.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI\make_timelapse_gifs.py
+Suzui,main,workflow_script,02_segment_dapi_double.py,Suzui/DAPI_OCT4/02_segment_dapi_double.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\02_segment_dapi_double.py
+Suzui,main,workflow_script,03-1_qc_filter_double.py,Suzui/DAPI_OCT4/03-1_qc_filter_double.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\03-1_qc_filter_double.py
+Suzui,main,workflow_script,03_extract_dapi_oct4_features.py,Suzui/DAPI_OCT4/03_extract_dapi_oct4_features.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\03_extract_dapi_oct4_features.py
+Suzui,main,workflow_script,04_cluster_dapi_oct4.py,Suzui/DAPI_OCT4/04_cluster_dapi_oct4.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\04_cluster_dapi_oct4.py
+Suzui,main,workflow_script,05_infer_dapi_oct4.py,Suzui/DAPI_OCT4/05_infer_dapi_oct4.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\05_infer_dapi_oct4.py
+Suzui,main,workflow_script,cellpose_segment_remove_border.py,Suzui/DAPI_OCT4/cellpose_segment_remove_border.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\cellpose_segment_remove_border.py
+Suzui,main,workflow_script,cellpose_segment_remove_border.py,Suzui/DAPI_OCT4/cellpose_share_package/cellpose_segment_remove_border.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\cellpose_share_package\cellpose_segment_remove_border.py
+Suzui,main,workflow_script,double_work_utils.py,Suzui/DAPI_OCT4/double_work_utils.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\Suzui\DAPI_OCT4\double_work_utils.py
+tests,main,test,test_entrypoints.py,tests/test_entrypoints.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\tests\test_entrypoints.py
+tests,main,test,test_suzui_layout.py,tests/test_suzui_layout.py,C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\tests\test_suzui_layout.py

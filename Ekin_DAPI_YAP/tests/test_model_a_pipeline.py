@@ -10,6 +10,29 @@ from ekin_dapi_yap import model_a_pipeline as MODULE
 
 
 class ModelAPipelineTests(unittest.TestCase):
+    def test_touching_labels_gain_background_gap_without_eroding_free_edges(self):
+        mask = np.array([[0, 0, 0, 0],
+                         [0, 1, 1, 2],
+                         [0, 1, 1, 2],
+                         [0, 0, 0, 0]], dtype=np.int32)
+        separated = MODULE.separate_touching_labels(mask)
+        self.assertTrue(np.all(separated[:, 2:] == 0))
+        self.assertEqual(separated[1, 1], 1)
+        self.assertEqual(separated[2, 1], 1)
+        self.assertTrue(np.all(separated[mask == 0] == 0))
+
+    def test_fixed_phenotype_identity_palette(self):
+        from matplotlib.colors import to_hex
+        expected = {
+            "Phenotype 1": "#0072B2",
+            "Phenotype 2": "#E69F00",
+            "Phenotype 3": "#009E73",
+            "Phenotype 4": "#CC79A7",
+            "Phenotype 5": "#D55E00",
+        }
+        actual = {key: to_hex(value).upper() for key, value in MODULE.phenotype_colors(expected).items()}
+        self.assertEqual(actual, expected)
+
     def test_experimental_group_palette_distinct_from_current_phenotypes(self):
         from matplotlib.colors import to_hex
         group_colors = {to_hex(color) for color in MODULE.EXPERIMENTAL_GROUP_COLORS.values()}

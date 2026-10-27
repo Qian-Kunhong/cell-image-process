@@ -14,7 +14,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgba
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
@@ -44,6 +44,15 @@ FOLDER_PATTERN = re.compile(
 EXPERIMENTAL_GROUP_ORDER = {"Ctrl": 0, "HA1": 1, "HA2": 2}
 # Experimental conditions use a separate visual key from morphology phenotypes.
 EXPERIMENTAL_GROUP_COLORS = {"Ctrl": "#171717", "HA1": "#D000B5", "HA2": "#00B8C4"}
+# Fixed phenotype identity colors used consistently in UMAP, overlays and PPT figures.
+PHENOTYPE_PALETTE = (
+    "#0072B2",  # P1 blue
+    "#E69F00",  # P2 golden yellow
+    "#009E73",  # P3 green
+    "#CC79A7",  # P4 pink-purple
+    "#D55E00",  # P5 orange-red
+    "#56B4E9", "#6A3D9A", "#8C8C00", "#7A7A7A", "#8B4513", "#00A6A6", "#E7298A",
+)
 EXPERIMENTAL_GROUP_METADATA = {
     "Ctrl": {
         "experimental_group_description": "Control (No HA)",
@@ -297,12 +306,40 @@ def validate_morphology_feature_names(columns) -> None:
         raise AssertionError(f"Post-hoc marker leakage into morphology model: {violations}")
 
 
+def separate_touching_labels(mask: np.ndarray) -> np.ndarray:
+    """Insert background only where two different Cellpose labels directly touch."""
+    if mask.ndim != 2 or not np.issubdtype(mask.dtype, np.integer):
+        raise ValueError("Expected a 2D integer label mask")
+    contacts = np.zeros(mask.shape, dtype=bool)
+    height, width = mask.shape
+    for row_shift, col_shift in ((1, 0), (0, 1), (1, 1), (1, -1)):
+        src_rows = slice(max(0, -row_shift), min(height, height - row_shift))
+        src_cols = slice(max(0, -col_shift), min(width, width - col_shift))
+        dst_rows = slice(max(0, row_shift), min(height, height + row_shift))
+        dst_cols = slice(max(0, col_shift), min(width, width + col_shift))
+        left = mask[src_rows, src_cols]
+        right = mask[dst_rows, dst_cols]
+        different = (left > 0) & (right > 0) & (left != right)
+        contacts[src_rows, src_cols] |= different
+        contacts[dst_rows, dst_cols] |= different
+    separated = mask.copy()
+    separated[contacts] = 0
+    return separated
+
+
+def cellpose_raw_mask_path(mask_path: Path) -> Path:
+    candidate = mask_path.parent.parent / "masks_cellpose_raw" / mask_path.name
+    return candidate if candidate.exists() else mask_path
+
+
 def segment_image_sets(
     image_sets: list[YAPImageSet], output_root: Path, use_gpu: bool, reuse_masks: bool
 ) -> dict[str, Path]:
     mask_dir = output_root / "segmentation" / "masks"
+    raw_mask_dir = output_root / "segmentation" / "masks_cellpose_raw"
     overlay_dir = output_root / "segmentation" / "overlays"
     mask_dir.mkdir(parents=True, exist_ok=True)
+    raw_mask_dir.mkdir(parents=True, exist_ok=True)
     overlay_dir.mkdir(parents=True, exist_ok=True)
     mask_paths = {item.image_id: mask_dir / f"{item.image_id}_mask.npy" for item in image_sets}
     pending = [item for item in image_sets if not (reuse_masks and mask_paths[item.image_id].exists())]
@@ -320,7 +357,9 @@ def segment_image_sets(
                 cellprob_threshold=0.0,
                 diameter=None,
             )
-            mask = np.asarray(masks, dtype=np.int32)
+            raw_mask = np.asarray(masks, dtype=np.int32)
+            np.save(raw_mask_dir / mask_path.name, raw_mask)
+            mask = separate_touching_labels(raw_mask)
             np.save(mask_path, mask)
         if mask.shape != dapi.shape:
             raise ValueError(f"Mask/image mismatch for {item.image_id}")
@@ -420,7 +459,9 @@ def extract_all_dapi_features(
 
 def measure_yap_posthoc(item: YAPImageSet, mask_path: Path, config=None,
                         background_roi_dir: Path | None = None) -> tuple[pd.DataFrame, np.ndarray, dict]:
-    mask = np.load(mask_path)
+    # YAP sampling uses the untrimmed Cellpose occupancy mask so removed
+    # label-contact pixels can never be mistaken for perinuclear cytoplasm.
+    mask = np.load(cellpose_raw_mask_path(mask_path))
     yap = load_gray(item.yap_org_path)
     background_roi = None
     if background_roi_dir is not None:
@@ -431,7 +472,11 @@ def measure_yap_posthoc(item: YAPImageSet, mask_path: Path, config=None,
 
 
 def phenotype_colors(labels) -> dict[str, tuple]:
-    return CORE.phenotype_colors(labels)
+    unique = sorted(set(str(label) for label in labels), key=lambda value: int(value.split()[-1]))
+    return {
+        label: to_rgba(PHENOTYPE_PALETTE[(int(label.split()[-1]) - 1) % len(PHENOTYPE_PALETTE)])
+        for label in unique
+    }
 
 
 def save_ring_qc_overlay(
@@ -488,7 +533,7 @@ def save_phenotype_overlay(
 def save_yap_ratio_overlay(
     item: YAPImageSet, mask_path: Path, result_df: pd.DataFrame, path: Path, raw: bool = False
 ) -> None:
-    save_ratio_figure(np.asarray(Image.open(item.merge_path).convert("RGB")), np.load(mask_path),
+    save_ratio_figure(load_gray(item.yap_org_path), np.load(mask_path),
                       result_df[result_df["image_id"].eq(item.image_id)],
                       f"{experimental_group_display(item.experimental_group_label)}, "
                       f"{item.seeding_density_cells_per_cm2:g} cells/cm², {item.magnification}", path, raw=raw)
@@ -942,12 +987,15 @@ def run(args: argparse.Namespace) -> None:
     ring_info = []
     ring_labels_by_image: dict[str, np.ndarray] = {}
     for item in selected_sets:
-        table, ring_labels, info = measure_yap_posthoc(item, mask_paths[item.image_id], yap_config,
+        morphology_mask_path = mask_paths[item.image_id]
+        measurement_mask_path = cellpose_raw_mask_path(morphology_mask_path)
+        table, ring_labels, info = measure_yap_posthoc(item, morphology_mask_path, yap_config,
                                                     getattr(args, "yap_background_roi_dir", None))
         yap_tables.append(table)
         ring_info.append(info)
         ring_labels_by_image[item.image_id] = ring_labels
-        save_ring_qc_overlay(item, mask_paths[item.image_id], ring_labels, info, ring_qc_dir / f"{item.image_id}_ring_qc.png", table)
+        save_ring_qc_overlay(item, measurement_mask_path, ring_labels, info,
+                             ring_qc_dir / f"{item.image_id}_ring_qc.png", table)
     yap_df = pd.concat(yap_tables, ignore_index=True)
     yap_df.to_csv(tables_dir / "yap_nuclear_perinuclear_measurements.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(ring_info).to_csv(tables_dir / "yap_ring_and_background_qc.csv", index=False, encoding="utf-8-sig")
@@ -1039,14 +1087,14 @@ def run(args: argparse.Namespace) -> None:
         },
         "posthoc_yap": {
             "algorithm_version": ALGORITHM_VERSION,
-            "measurement": "background-corrected nuclear median / non-overlapping perinuclear-ring median",
+            "measurement": "background-corrected nuclear median / YAP-contour-supported perinuclear median",
             "classification_threshold": "none; continuous ratio retained",
             "ring_width_rule": "default inner gap 0; outer distance 0.20 median nuclear diameter; all segmented DAPI nuclei excluded; 0.35 wide-ring sensitivity saved",
-            "background_rule": "user cell-free ROI or inferred far-from-nuclei median + robust noise; insufficient background gives NaN, no percentile fallback",
+            "background_rule": "user cell-free ROI or pixels outside the permissive YAP cell/colony contour; insufficient background gives NaN, no percentile fallback",
             "qc_config": yap_config.__dict__,
             "qc_interpretation": "any nonempty nuclear-excluded ring measured; coverage, clipping and noise are warnings only; ratio_valid means corrected ratio is mathematically available, not validated",
             "raw_ratios": "stored and plotted separately; no background fallback or mixing with corrected ratios",
-            "limitations": "perinuclear enrichment proxy, not a true whole-cell cytoplasmic measurement; no membrane/cytoplasm marker",
+            "limitations": "YAP-supported perinuclear enrichment proxy; colony contour is not a membrane-resolved whole-cell boundary",
             "used_for_preprocessing_umap_or_gmm": False,
         },
         "metadata_interpretation": {

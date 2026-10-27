@@ -18,8 +18,25 @@ Thumbs.db
 
 *.log
 **/outputs/
+**/output/
 **/segmentation/
+analysis_outputs/
+build_ppt/previews_*/
+tmp/
+.codex_deps/
 *.npy
 *.npz
 *.joblib
 *.pkl
+*.pptx
+*.7z
+tmp_*
+docx_extracted_text.txt
+build_ppt/.codex-finalizer*/
+build_ppt/assets/
+build_ppt/previews/
+build_ppt/*.png
+build_ppt/*.webp
+build_ppt/*.pptx
+build_ppt/*.json
+build_ppt/*.ndjson

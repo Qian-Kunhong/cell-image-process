@@ -5,14 +5,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
 from scipy.ndimage import distance_transform_edt
-from skimage.measure import regionprops
+from skimage.measure import find_contours, regionprops
 from skimage.segmentation import find_boundaries
 
 
-def save_ratio_figure(merge, mask, table, title, path: Path, raw=False):
+def save_ratio_figure(yap, mask, table, title, path: Path, raw=False):
     norm = Normalize(-2, 2, clip=True)  # Shared across all fields; not biological cutoffs.
     cmap = plt.get_cmap("coolwarm")
     canvas = np.full((*mask.shape, 3), 0.04)
@@ -27,8 +28,27 @@ def save_ratio_figure(merge, mask, table, title, path: Path, raw=False):
         if passed:
             valid_labels.add(int(row.label))
     fig, axes = plt.subplots(1, 2, figsize=(14, 7.4))
-    axes[0].imshow(merge)
-    axes[0].set_title("Original merge (display only)")
+    display_values = np.asarray(yap, dtype=float)
+    finite = display_values[np.isfinite(display_values)]
+    vmin, vmax = (np.percentile(finite, [1, 99.5]) if finite.size else (0.0, 1.0))
+    if vmax <= vmin:
+        vmax = vmin + 1.0
+    axes[0].imshow(display_values, cmap="gray", vmin=vmin, vmax=vmax)
+    for label in np.unique(mask):
+        if label == 0:
+            continue
+        for contour in find_contours(mask == label, level=0.5):
+            axes[0].plot(
+                contour[:, 1], contour[:, 0], color="#00e5ff", linewidth=.65,
+                linestyle=(0, (3, 2)), alpha=.95,
+            )
+    axes[0].legend(
+        handles=[Line2D([], [], color="#00e5ff", linewidth=1.2,
+                        linestyle=(0, (3, 2)), label="DAPI-defined nuclear boundary")],
+        loc="lower left", frameon=True, facecolor="black", edgecolor="none",
+        labelcolor="white", fontsize=8,
+    )
+    axes[0].set_title("YAP AF488 intensity + DAPI nuclear outlines (display only)")
     axes[1].imshow(canvas)
     for prop in regionprops(mask):
         if prop.label in keep and prop.label not in valid_labels:

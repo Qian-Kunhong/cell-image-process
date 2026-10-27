@@ -19,7 +19,7 @@ class PPTFigureTests(unittest.TestCase):
         self.assertEqual(len(MODULE.TITLES), 16)
         self.assertEqual(tuple(MODULE.GROUP_LABELS), MODULE.GROUP_ORDER)
         self.assertEqual(set(MODULE.PHENOTYPE_NOTES), set(MODULE.HEATMAP_PHENOTYPE_NOTES))
-        self.assertEqual(MODULE.TITLES["composition"], "Morphology phenotype counts")
+        self.assertEqual(MODULE.TITLES["composition"], "Morphology phenotype composition")
         self.assertIn("14_umap_dominant_phenotypes", MODULE.SVG_NOTES)
         self.assertIn("excluded", MODULE.SVG_NOTES["14_umap_dominant_phenotypes"])
 
@@ -85,9 +85,11 @@ class PPTFigureTests(unittest.TestCase):
         self.assertTrue(np.allclose(original_distances, rotated_distances))
         self.assertGreaterEqual(np.var(rotated[:, 0]), np.var(rotated[:, 1]))
 
-    def test_composition_uses_actual_counts_and_labels_totals(self):
+    def test_composition_uses_fractions_and_labels_actual_totals(self):
         source = MODULE_PATH.read_text(encoding="utf-8")
         self.assertIn('f"n={int(total)}"', source)
+        self.assertIn('fractions = counts.div(', source)
+        self.assertIn('axes[0].set_ylabel("Cell fraction")', source)
         self.assertIn('ax.bar(x, values, bottom=bottom', source)
 
 

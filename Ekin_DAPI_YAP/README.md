@@ -59,6 +59,17 @@ refresh_yap_posthoc.py
 
 它默认读取当前 40×结果，并写入新的带时间戳子目录，不覆盖原模型。
 
+## 独立审计入口
+
+- `run_composite_feature_control.py`：按脚本顶部的特征开关运行可复现的特征面板对照；
+- `analyze_ha_uniformity.py`：按接种密度比较 HA1/HA2 与 Ctrl 的形态离散度和 YAP 定位；
+- `run_interpretable_phenotypes.py`：运行不含 DAPI 强度和工程化复合特征的精简表型模型；
+- `evaluate_interpretable_models.py`：只基于已有单细胞表审计候选特征面板，不改写结果；
+- `analyze_dapi_yap_association.py`：汇总连续 DAPI–YAP 关联，不把 YAP 送入形态聚类。
+
+这些入口均写入独立的 `outputs/` 子目录，不覆盖主 40× 模型。所有回归测试集中在
+`tests/`；根目录下与早期入口同名的脚本不再是当前 YAP 流程的一部分。
+
 ## 科学边界
 
 - GMM 表型仅由 DAPI 核形态和空间邻域特征得到，不是已验证的细胞类型或细胞周期标签。

@@ -17,11 +17,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgb
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
+from PIL import Image
+from skimage.measure import find_contours
+from skimage.segmentation import find_boundaries
+
+from ekin_dapi_yap.yap_ratio_qc import build_yap_supported_ring_labels
 
 
 # =========================== SETTINGS: EDIT HERE ============================
@@ -92,6 +97,7 @@ PHENOTYPE_PALETTE = (
 )
 
 ACTIVE_MAGNIFICATION = ""
+ACTIVE_MODEL_FEATURES = None
 HEATMAP_PHENOTYPE_NOTES = {
     "Phenotype 1": "Near-average profile",
     "Phenotype 2": "Higher DAPI intensity",
@@ -124,12 +130,12 @@ TITLES = {
     "phenotype_umap": "Morphology phenotypes",
     "group_umap": "HA groups on the morphology map",
     "density_umap": "Seeding density on the morphology map",
-    "composition": "Morphology phenotype counts",
+    "composition": "Morphology phenotype composition",
     "composition_fraction": "Phenotype composition",
     "heatmap": "DAPI morphology profiles",
     "membership": "Phenotype membership confidence",
     "yap": "YAP nuclear enrichment by condition",
-    "yap_phenotype": "YAP localization across morphology phenotypes",
+    "yap_phenotype": "YAP by morphology phenotype",
     "gmm": "GMM model selection",
     "ha_effect_heatmap": "HA-associated morphology shifts",
     "ha_trends": "Morphology across seeding densities",
@@ -145,12 +151,12 @@ SVG_NOTES = {
     "01_umap_phenotypes": "DAPI-derived features only. Colors show the dominant GMM component. YAP and experimental labels were excluded from preprocessing, UMAP and GMM. Coordinates were rigidly rotated to place the main UMAP axis horizontally; distances and cluster membership are unchanged.",
     "02_umap_experimental_groups": "Experimental groups are overlaid post hoc on the DAPI-only UMAP. Group labels were excluded from preprocessing, UMAP and GMM. The rigid display rotation does not change distances.",
     "03_umap_seeding_density": "Seeding densities are overlaid post hoc on the DAPI-only UMAP and were excluded from preprocessing, UMAP and GMM.",
-    "04_phenotype_composition": "Stacked bars show actual single-cell counts assigned to each dominant GMM phenotype. Total bar height is the observed cell count, not a normalized percentage. One image field is available per condition, so the comparison is descriptive.",
+    "04_phenotype_composition": "Each bar is normalized to 100% to compare phenotype composition. The label above each bar gives the actual number of QC-kept cells. One image field is available per condition, so the comparison is descriptive.",
     "05_phenotype_feature_profiles": "Each tile is the phenotype mean relative to the pooled mean in overall standard-deviation units. Labels P1, P2, and so on are statistical GMM components, not validated cell types.",
     "06_phenotype_membership": "Each panel shows the full GMM posterior probability for one phenotype. High values indicate stronger membership; transitional cells can have distributed probability across phenotypes.",
     "07_yap_localization": "Raw uncorrected log2 nuclear/perinuclear YAP ratios shown post hoc. YAP was excluded from preprocessing, UMAP and GMM. Perinuclear signal is a DAPI-excluded ring proxy, not a membrane-segmented whole-cell cytoplasm.",
     "08_gmm_model_selection": "K is the number of GMM components. Penalized BIC combines model fit with penalties for complexity and small or fragmented clusters; lower is better. Selected K is the minimum penalized BIC and is not proof of biological cell types.",
-    "09_yap_by_phenotype": "Raw uncorrected log2 nuclear/perinuclear YAP ratios grouped by DAPI-defined dominant phenotype. YAP was measured only after clustering and did not define the phenotypes.",
+    "09_yap_by_phenotype": "Background-corrected log2 nuclear/perinuclear YAP ratios grouped by DAPI-defined dominant phenotype. YAP was measured only after clustering and did not define the phenotypes.",
     "10_ha_morphology_effect_summary": "Each HA condition is compared with the control at the same seeding density. Circles are density-specific effects in control-IQR units, diamonds are medians across the four density strata, and horizontal segments span the observed density-specific range.",
     "11_ha_density_specific_morphology_effects": "Every value compares an HA group with control at the same seeding density. Red indicates higher and blue lower than the matched control in control-IQR units. Density is a matching stratum, not the primary outcome.",
     "12_ha_yap_effect_summary": "Change in raw log2 nuclear/perinuclear YAP relative to the density-matched control. YAP is post-hoc biological characterization and was excluded from the morphology model.",
@@ -219,6 +225,151 @@ def save(fig, output_dir: Path, stem: str) -> None:
     plt.close(fig)
 
 
+def _display_limits(image: np.ndarray) -> tuple[float, float]:
+    values = np.asarray(image, dtype=float)
+    finite = values[np.isfinite(values)]
+    if not finite.size:
+        return 0.0, 1.0
+    low, high = np.percentile(finite, [1, 99.5])
+    return (float(low), float(high if high > low else low + 1.0))
+
+
+def make_stepwise_method_figures(cells: pd.DataFrame, root: Path, output_dir: Path) -> None:
+    """Create two method-first figures for a stepwise DAPI/YAP presentation."""
+    step_root = output_dir / "stepwise"
+    if step_root.exists():
+        shutil.rmtree(step_root)
+    dapi_dir, yap_dir = step_root / "DAPI", step_root / "YAP"
+    phenotype_names = phenotype_order(cells)
+    selected_k = len(phenotype_names)
+    colors = phenotype_colors(phenotype_names)
+
+    # DAPI: one three-panel workflow for every HA-group × seeding-density field.
+    manifest = pd.read_csv(root / "tables" / "image_manifest.csv")
+    manifest = manifest[
+        manifest.magnification.eq(ACTIVE_MAGNIFICATION)
+        & manifest.pairing_status.eq("ok")
+    ].copy()
+    manifest["group_order"] = manifest.experimental_group_label.map(
+        {group: index for index, group in enumerate(GROUP_ORDER)}
+    )
+    manifest = manifest.sort_values(["group_order", "seeding_density_cells_per_cm2"])
+    for figure_index, record in enumerate(manifest.itertuples(index=False), start=1):
+        group_cells = cells[
+            cells.experimental_group_label.eq(record.experimental_group_label)
+            & cells.seeding_density_cells_per_cm2.eq(record.seeding_density_cells_per_cm2)
+        ].copy()
+        current_image_id = group_cells.image_id.iloc[0]
+        current_dapi = np.asarray(Image.open(record.dapi_org_path))
+        current_mask = np.load(root / "segmentation" / "masks" / f"{current_image_id}_mask.npy")
+        lo, hi = _display_limits(current_dapi)
+        fig, axes = plt.subplots(1, 3, figsize=CANVAS)
+        axes[0].imshow(current_dapi, cmap="gray", vmin=lo, vmax=hi)
+        axes[0].set_title("1\nDAPI input", fontsize=16, fontweight="bold", pad=8)
+        axes[1].imshow(current_dapi, cmap="gray", vmin=lo, vmax=hi)
+        boundaries = find_boundaries(current_mask, mode="outer")
+        axes[1].imshow(np.ma.masked_where(~boundaries, boundaries), cmap="autumn", alpha=.9)
+        axes[1].set_title("2\nNuclear segmentation", fontsize=16, fontweight="bold", pad=8)
+        phenotype_canvas = np.zeros((*current_mask.shape, 3), dtype=float)
+        for cell in group_cells.itertuples(index=False):
+            phenotype_canvas[current_mask == int(cell.label)] = to_rgb(colors[cell.dominant_phenotype])
+        # Adjacent nuclei with the same phenotype otherwise look like one fused region.
+        # The black line is display-only; labels, features and GMM assignments are unchanged.
+        phenotype_canvas[find_boundaries(current_mask, mode="inner")] = 0.0
+        axes[2].imshow(phenotype_canvas)
+        axes[2].set_title(
+            f"3\nGMM phenotype P1–P{selected_k}", fontsize=16, fontweight="bold", pad=8
+        )
+        for ax in axes:
+            ax.axis("off")
+        handles = [Line2D([], [], marker="o", linestyle="none", color=colors[name],
+                          label=name.replace("Phenotype ", "P")) for name in phenotype_names]
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False)
+        density = record.seeding_density_cells_per_cm2 / 1000
+        density_label = f"{density:g}k cells/cm²"
+        fig.suptitle(
+            f"{GROUP_LABELS[record.experimental_group_label]} · {density_label}: DAPI phenotype assignment",
+            fontsize=21, fontweight="bold",
+        )
+        fig.text(.5, .105,
+                 "23 morphology/neighborhood features → median imputation → robust scaling → PCA → GMM",
+                 ha="center", fontsize=12, fontweight="bold")
+        fig.text(.5, .065,
+                 f"DAPI intensity excluded · K searched from 2–12; penalized BIC selected K={selected_k} · UMAP is display only",
+                 ha="center", fontsize=11)
+        fig.subplots_adjust(left=.025, right=.985, top=.82, bottom=.18, wspace=.035)
+        stem = f"{figure_index:02d}_{record.experimental_group_label}_{density:g}k_DAPI_workflow".replace(".", "p")
+        save(fig, dapi_dir, stem)
+
+    # YAP: the same three-panel measurement workflow for all 12 fields.
+    ratio_col = "posthoc_yap_log2_nuclear_perinuclear_ratio"
+    ratio_cmap = plt.get_cmap("coolwarm").copy()
+    ratio_cmap.set_bad("black")
+    for figure_index, record in enumerate(manifest.itertuples(index=False), start=1):
+        group_cells = cells[
+            cells.experimental_group_label.eq(record.experimental_group_label)
+            & cells.seeding_density_cells_per_cm2.eq(record.seeding_density_cells_per_cm2)
+        ].copy()
+        current_image_id = group_cells.image_id.iloc[0]
+        current_yap = np.asarray(Image.open(record.yap_af488_org_path))
+        current_mask = np.load(root / "segmentation" / "masks" / f"{current_image_id}_mask.npy")
+        rings, yap_support, _, _, _, _ = build_yap_supported_ring_labels(
+            current_yap, current_mask, outer_fraction=.20, inner_fraction=0.0)
+        fig = plt.figure(figsize=CANVAS)
+        grid = fig.add_gridspec(1, 5, width_ratios=(1, 1, 1, 1, .045), wspace=.055)
+        axes = np.asarray([fig.add_subplot(grid[0, index]) for index in range(4)])
+        colorbar_ax = fig.add_subplot(grid[0, 4])
+        lo, hi = _display_limits(current_yap)
+        axes[0].imshow(current_yap, cmap="gray", vmin=lo, vmax=hi)
+        axes[0].set_title("1\nYAP AF488 input", fontsize=14, fontweight="bold", pad=8)
+        axes[1].imshow(current_yap, cmap="gray", vmin=lo, vmax=hi)
+        for label in np.unique(current_mask):
+            if label == 0:
+                continue
+            for contour in find_contours(current_mask == label, level=.5):
+                axes[1].plot(contour[:, 1], contour[:, 0], color="#00E5FF", linewidth=.65,
+                             linestyle=(0, (3, 2)), alpha=.95)
+        axes[1].set_title("2\nDAPI nuclear outlines", fontsize=14, fontweight="bold", pad=8)
+        axes[2].imshow(current_yap, cmap="gray", vmin=lo, vmax=hi)
+        sampling = np.zeros((*current_mask.shape, 4), dtype=float)
+        sampling[current_mask > 0] = (0.0, .70, 1.0, .34)
+        sampling[rings > 0] = (0.0, 1.0, .35, .48)
+        axes[2].imshow(sampling)
+        for contour in find_contours(yap_support, level=.5):
+            axes[2].plot(contour[:, 1], contour[:, 0], color="#FF2DAA", linewidth=.8)
+        axes[2].set_title("3\nYAP-constrained sampling", fontsize=14, fontweight="bold", pad=8)
+        ratio_canvas = np.full(current_mask.shape, np.nan)
+        for cell in group_cells.itertuples(index=False):
+            value = getattr(cell, ratio_col)
+            if np.isfinite(value):
+                ratio_canvas[current_mask == int(cell.label)] = value
+        shown = axes[3].imshow(ratio_canvas, cmap=ratio_cmap, vmin=-2, vmax=2)
+        axes[3].set_title("4\nYAP ratio heatmap", fontsize=14, fontweight="bold", pad=6)
+        for ax in axes:
+            ax.axis("off")
+        # Dedicated fifth column: the colorbar never changes panel 4's size.
+        fig.colorbar(shown, cax=colorbar_ax, label="log₂(YAP nuclear / perinuclear)")
+        fig.legend(handles=[Line2D([], [], color="#00E5FF", linestyle=(0, (3, 2)),
+                                   label="DAPI nuclear outline"),
+                            Patch(facecolor="#00B2FF", alpha=.5, label="DAPI-defined nucleus"),
+                            Patch(facecolor="#00FF59", alpha=.5,
+                                  label="YAP-supported nuclear-excluded cytoplasm"),
+                            Line2D([], [], color="#FF2DAA", label="YAP cell/colony contour")],
+                   loc="lower center", ncol=4, frameon=False)
+        density = record.seeding_density_cells_per_cm2 / 1000
+        density_label = f"{density:g}k cells/cm²"
+        fig.suptitle(
+            f"{GROUP_LABELS[record.experimental_group_label]} · {density_label}: YAP localization",
+            fontsize=21, fontweight="bold",
+        )
+        fig.text(.5, .08,
+                 "Median AF488 intensity after background subtraction · YAP is post-hoc and excluded from UMAP/GMM",
+                 ha="center", fontsize=12)
+        fig.subplots_adjust(left=.025, right=.965, top=.82, bottom=.16)
+        stem = f"{figure_index:02d}_{record.experimental_group_label}_{density:g}k_YAP_workflow".replace(".", "p")
+        save(fig, yap_dir, stem)
+
+
 def oriented_umap(cells: pd.DataFrame) -> np.ndarray:
     """Rigidly rotate UMAP so its longest global axis is horizontal.
 
@@ -252,7 +403,10 @@ def plot_umap(cells, output_dir, color_by="phenotype", stem_override=None,
     stem = stem_override or ("01_umap_phenotypes" if color_by == "phenotype"
                              else "02_umap_experimental_groups")
     fig, ax = plt.subplots(figsize=SCATTER_CANVAS)
-    fig.subplots_adjust(left=.14, right=.97, bottom=.27, top=.86)
+    if color_by == "phenotype" and include_phenotype_notes:
+        fig.subplots_adjust(left=.14, right=.97, bottom=.30, top=.86)
+    else:
+        fig.subplots_adjust(left=.14, right=.97, bottom=.27, top=.86)
     xy = oriented_umap(cells)
     limits = square_limits(xy)
     if color_by == "phenotype":
@@ -288,9 +442,14 @@ def plot_umap(cells, output_dir, color_by="phenotype", stem_override=None,
     ax.set(xlabel="UMAP 1", ylabel="UMAP 2", xlim=limits[0], ylim=limits[1])
     ax.set_aspect("equal", adjustable="box")
     ax.set_box_aspect(1)
-    ax.legend(handles=handles, title=legend_title, loc="lower center",
-              bbox_to_anchor=(.5, -.29), ncol=min(len(handles), 6), frameon=False,
-              title_fontsize=LEGEND_SIZE + 1)
+    if color_by == "phenotype" and include_phenotype_notes:
+        ax.legend(handles=handles, title=legend_title, loc="lower center",
+                  bbox_to_anchor=(.5, -.34), ncol=2, frameon=False,
+                  title_fontsize=LEGEND_SIZE + 1)
+    else:
+        ax.legend(handles=handles, title=legend_title, loc="lower center",
+                  bbox_to_anchor=(.5, -.29), ncol=min(len(handles), 6), frameon=False,
+                  title_fontsize=LEGEND_SIZE + 1)
     title(fig, key)
     save(fig, output_dir, stem)
 
@@ -321,27 +480,28 @@ def plot_density_umap(cells, output_dir):
 def plot_composition(cells, output_dir, stem="04_phenotype_composition"):
     names = phenotype_order(cells)
     colors = phenotype_colors(names)
+    # Three horizontally aligned groups, with each plotting frame kept square.
     fig, axes = plt.subplots(1, 3, figsize=CANVAS, sharey=True)
-    max_count = cells.groupby(
-        ["experimental_group_label", "seeding_density_cells_per_cm2"]
-    ).size().max()
     for ax, group in zip(axes, GROUP_ORDER):
         sub = cells[cells.experimental_group_label.eq(group)]
         counts = (sub.groupby(["seeding_density_cells_per_cm2", "dominant_phenotype"]).size()
                   .unstack(fill_value=0).reindex(index=DENSITY_ORDER, columns=names, fill_value=0))
+        totals = counts.sum(axis=1)
+        fractions = counts.div(totals.replace(0, np.nan), axis=0).fillna(0)
         bottom = np.zeros(4)
         x = np.arange(4)
         for name in names:
-            values = counts[name].to_numpy(dtype=float)
+            values = fractions[name].to_numpy(dtype=float)
             ax.bar(x, values, bottom=bottom, width=.78, color=colors[name])
             bottom += values
         ax.set_xticks(x, [f"{d/1000:g}k" for d in DENSITY_ORDER])
+        ax.set_box_aspect(1)
         ax.set_xlabel(GROUP_LABELS[group], fontsize=11, fontweight="bold", labelpad=8)
-        for xpos, total in zip(x, counts.sum(axis=1)):
-            ax.text(xpos, float(total) + max_count * .018, f"n={int(total)}",
-                    ha="center", va="bottom", fontsize=10.5, fontweight="bold")
-    axes[0].set_ylim(0, max_count * 1.16)
-    axes[0].set_ylabel("Cell count")
+        for xpos, total in zip(x, totals):
+            ax.text(xpos, 1.018, f"n={int(total)}",
+                    ha="center", va="bottom", fontsize=9.5, fontweight="bold")
+    axes[0].set_ylim(0, 1.12)
+    axes[0].set_ylabel("Cell fraction")
     handles = [Patch(facecolor=colors[name], label=f"P{name.split()[-1]}") for name in names]
     fig.legend(handles=handles, ncol=len(names), loc="lower center",
                bbox_to_anchor=(.5, -.005), frameon=False)
@@ -352,24 +512,32 @@ def plot_composition(cells, output_dir, stem="04_phenotype_composition"):
 
 
 def plot_composition_fraction(cells, output_dir, stem="16_phenotype_composition_fraction"):
-    """Backward-compatible wrapper; bars now use actual cell counts."""
+    """Backward-compatible wrapper for the normalized composition chart."""
     plot_composition(cells, output_dir, stem=stem)
 
 
 def plot_heatmap(cells, output_dir):
     names = phenotype_order(cells)
-    columns = [column for column in HEATMAP_FEATURES if column in cells]
+    columns = [
+        column for column in HEATMAP_FEATURES
+        if column in cells and (ACTIVE_MODEL_FEATURES is None or column in ACTIVE_MODEL_FEATURES)
+    ]
     means = cells.groupby("dominant_phenotype")[columns].mean().reindex(names)
     z = (means - cells[columns].mean()) / cells[columns].std(ddof=0).replace(0, np.nan)
     fig, ax = plt.subplots(figsize=CANVAS)
     image = ax.imshow(z.to_numpy(), aspect="auto", cmap="coolwarm", vmin=-2.5, vmax=2.5)
-    ax.set_yticks(range(len(names)), [f"P{name.split()[-1]}" for name in names])
+    row_labels = []
+    for name in names:
+        fallback = f"P{name.split()[-1]}"
+        label = HEATMAP_PHENOTYPE_NOTES.get(name, fallback)
+        row_labels.append(label if str(label).startswith("P") else f"{fallback} · {label}")
+    ax.set_yticks(range(len(names)), row_labels)
     ax.set_xticks(range(len(columns)), [HEATMAP_FEATURES[c] for c in columns], rotation=42, ha="right")
     ax.tick_params(axis="x", labelsize=10)
     bar = fig.colorbar(image, ax=ax, fraction=.025, pad=.02)
     bar.set_label("Difference from pooled mean (SD)", fontsize=13)
     ax.set_xlabel("Morphology and neighborhood features", labelpad=9)
-    fig.subplots_adjust(left=.10, right=.93, bottom=.28, top=.84)
+    fig.subplots_adjust(left=.22, right=.93, bottom=.28, top=.84)
     title(fig, "heatmap")
     save(fig, output_dir, "05_phenotype_feature_profiles")
 
@@ -380,8 +548,12 @@ def plot_membership(cells, output_dir, stem="06_phenotype_membership"):
     fig, axes = plt.subplots(nrows, ncols, figsize=CANVAS, sharex=True, sharey=True, squeeze=False)
     xy = oriented_umap(cells)
     limits = square_limits(xy)
-    color = (0/255, 98/255, 155/255)
-    cmap = LinearSegmentedColormap.from_list("probability", [(*color, .04), (*color, 1.0)])
+    # Use a dedicated probability palette so this continuous quantity is not
+    # confused with the categorical blue assigned to morphology phenotype P1.
+    cmap = LinearSegmentedColormap.from_list(
+        "membership_probability",
+        ["#F7F0FA", "#C994D8", "#6A1B9A"],
+    )
     for ax, column in zip(axes.flat, columns):
         ax.scatter(xy[:, 0], xy[:, 1], c=cells[column], s=7, cmap=cmap,
                    norm=Normalize(0, 1), edgecolors="none")
@@ -399,8 +571,8 @@ def plot_membership(cells, output_dir, stem="06_phenotype_membership"):
 
 
 def plot_yap(cells, output_dir, stem="07_yap_localization"):
-    column = "posthoc_yap_raw_log2_nuclear_perinuclear_ratio"
-    fig, ax = plt.subplots(figsize=CANVAS)
+    column = "posthoc_yap_log2_nuclear_perinuclear_ratio"
+    fig, ax = plt.subplots(figsize=SCATTER_CANVAS)
     positions, arrays, colors, labels = [], [], [], []
     pos = 1
     for group in GROUP_ORDER:
@@ -428,7 +600,7 @@ def plot_yap(cells, output_dir, stem="07_yap_localization"):
 def plot_yap_by_phenotype(cells, output_dir, stem="09_yap_by_phenotype",
                           include_phenotype_notes=True):
     """Post-hoc YAP distribution for each DAPI-defined morphology phenotype."""
-    column = "posthoc_yap_raw_log2_nuclear_perinuclear_ratio"
+    column = "posthoc_yap_log2_nuclear_perinuclear_ratio"
     names = phenotype_order(cells)
     colors = phenotype_colors(names)
     arrays, labels = [], []
@@ -437,7 +609,7 @@ def plot_yap_by_phenotype(cells, output_dir, stem="09_yap_by_phenotype",
         values = pd.to_numeric(sub[column], errors="coerce").dropna().to_numpy()
         arrays.append(values)
         labels.append(f"P{name.split()[-1]}")
-    fig, ax = plt.subplots(figsize=CANVAS)
+    fig, ax = plt.subplots(figsize=SCATTER_CANVAS)
     positions = np.arange(1, len(names) + 1)
     box = ax.boxplot(arrays, positions=positions, widths=.62, patch_artist=True,
                      showfliers=False, medianprops={"color": "#111111", "linewidth": 2.2})
@@ -445,9 +617,10 @@ def plot_yap_by_phenotype(cells, output_dir, stem="09_yap_by_phenotype",
         patch.set_facecolor(colors[name]); patch.set_alpha(.82)
     ax.axhline(0, color="#555555", ls=":", lw=1.2)
     ax.set_xticks(positions, labels, fontsize=11)
-    ax.set_xlabel("Morphology phenotype", labelpad=10)
-    ax.set_ylabel("log₂(nuclear/perinuclear YAP)")
-    fig.subplots_adjust(left=.10, right=.97, bottom=.17, top=.84)
+    ax.set_xlabel("DAPI morphology phenotype", labelpad=10)
+    ax.set_ylabel("YAP nuclear enrichment\nlog₂(nuclear/perinuclear)")
+    ax.set_box_aspect(1)
+    fig.subplots_adjust(left=.17, right=.96, bottom=.15, top=.84)
     title(fig, "yap_phenotype")
     save(fig, output_dir, stem)
 
@@ -846,7 +1019,7 @@ def plot_gmm(selection, output_dir):
 
 
 def main(argv=None):
-    global ACTIVE_MAGNIFICATION
+    global ACTIVE_MAGNIFICATION, ACTIVE_MODEL_FEATURES, PHENOTYPE_NOTES, HEATMAP_PHENOTYPE_NOTES
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path,
                         default=Path(__file__).resolve().parent / "outputs" / "composite_no_dapi_intensity" / "40x" / "all_fields")
@@ -863,6 +1036,21 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     root = args.output_root.resolve()
+    run_info_source = root / "run_info.json"
+    if run_info_source.exists():
+        run_info = json.loads(run_info_source.read_text(encoding="utf-8"))
+        ACTIVE_MODEL_FEATURES = set(run_info.get("model_feature_columns", [])) or None
+    else:
+        ACTIVE_MODEL_FEATURES = None
+    label_source = root / "tables" / "phenotype_labels.csv"
+    if label_source.exists():
+        labels = pd.read_csv(label_source)
+        required_label_columns = {"dominant_phenotype", "short_label", "heatmap_label"}
+        missing_label_columns = sorted(required_label_columns - set(labels.columns))
+        if missing_label_columns:
+            raise ValueError(f"Missing phenotype label columns: {missing_label_columns}")
+        PHENOTYPE_NOTES = dict(zip(labels["dominant_phenotype"], labels["short_label"]))
+        HEATMAP_PHENOTYPE_NOTES = dict(zip(labels["dominant_phenotype"], labels["heatmap_label"]))
     ACTIVE_MAGNIFICATION = next(
         (part.lower() for part in root.parts if part.lower() == "40x"),
         "",
@@ -917,6 +1105,8 @@ def main(argv=None):
         "11_ha_density_specific_morphology_effects.png",
         "12_ha_yap_effect_summary.png",
     ])
+    if not args.ha_effects_only:
+        make_stepwise_method_figures(cells, root, output_dir)
     if args.ha_effects_only:
         make_model_supplement_figures(cells, output_dir)
         expected.extend([

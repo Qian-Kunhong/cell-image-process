@@ -2,6 +2,7 @@ import unittest
 
 from ekin_dapi_yap import model_a_pipeline as PIPELINE
 import run_40x_analysis as CONTROL
+import run_interpretable_phenotypes as INTERPRETABLE
 
 
 class FeatureSwitchTests(unittest.TestCase):
@@ -26,6 +27,21 @@ class FeatureSwitchTests(unittest.TestCase):
             PIPELINE.CORE.resolve_model_features("augmented", {"not_a_feature": False})
         with self.assertRaises(TypeError):
             PIPELINE.CORE.resolve_model_features("augmented", {"area_px": 1})
+
+    def test_interpretable_profile_is_complete_and_has_neutral_current_labels(self):
+        self.assertEqual(set(INTERPRETABLE.FEATURE_SWITCHES),
+                         set(PIPELINE.CORE.ALL_SWITCHABLE_MODEL_FEATURES))
+        enabled, _ = PIPELINE.CORE.resolve_model_features(
+            "raw", INTERPRETABLE.FEATURE_SWITCHES)
+        augmented, augmented_disabled = PIPELINE.CORE.resolve_model_features(
+            "augmented", INTERPRETABLE.FEATURE_SWITCHES)
+        self.assertEqual(enabled, augmented)
+        self.assertTrue(all("intensity" not in name.lower() for name in enabled))
+        self.assertTrue(set(PIPELINE.CORE.COMPOSITE_MODEL_FEATURES).issubset(augmented_disabled))
+        self.assertEqual(len(INTERPRETABLE.PHENOTYPE_LABELS), 3)
+        combined = " ".join(row["short_label"] for row in INTERPRETABLE.PHENOTYPE_LABELS).lower()
+        self.assertNotIn("cell cycle", combined)
+        self.assertNotIn("pluripot", combined)
 
 
 if __name__ == "__main__":
