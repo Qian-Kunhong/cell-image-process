@@ -1,0 +1,17 @@
+{
+  "project_name": "Naruchit data",
+  "python": "C:\\Users\\dodos\\miniforge3\\envs\\cellpose\\python.exe",
+  "data_root": "F:\\Naruchit data\\1_Data of published manuscripts\\3_Hepatocyte differentiation",
+  "legacy_code_root": "C:\\Users\\dodos\\PyCharmMiscProject\\surrogate model\\cell image",
+  "output_root": "analysis_outputs",
+  "units": {
+    "statistical_unit": "field",
+    "group_key": "sample_code",
+    "batch_key": "run_id"
+  },
+  "imaging": {
+    "xy_um_per_px": 0.17578,
+    "z_um": 0.5
+  },
+  "notes": "当前数据每条件仅 1 个 OIB 视野、无孔级配对键；统计单位是视野，细胞核只是技术子样本，组间结论只能写描述性。"
+}

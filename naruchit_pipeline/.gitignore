@@ -1,0 +1,36 @@
+# 数据不进版本库：原始与中间数据一律留在外部盘，只在 data/README.md 记路径
+data/*
+!data/README.md
+
+# 输出不进版本库：每次运行都生成新目录，靠 run_info.json 复现
+analysis_outputs/*
+!analysis_outputs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+*.egg-info/
+
+# 环境与编辑器
+.venv/
+env/
+.idea/
+.vscode/
+
+# 大文件与临时产物
+*.oib
+*.tif
+*.tiff
+*.fcs
+*.npz
+*.npy
+*.h5ad
+*.png
+*.jpg
+*.svg
+*.pdf
+*.docx
+*.pptx
+*.xlsx
