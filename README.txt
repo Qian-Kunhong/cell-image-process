@@ -54,13 +54,10 @@ cell image/
 |   |-- COMPOSITE_FEATURES.md          复合特征公式、量纲与科学解释
 |   `-- README.md                      OCT4 专项说明
 |-- Ekin_DAPI_YAP/
-|   |-- run_baseline.py                PyCharm：基线特征模型入口
-|   |-- run_composite.py               PyCharm：增强特征模型入口
-|   |-- yap_40x_trial.py               YAP 主流程（也支持 20x）
-|   |-- run_all_20x.ps1                20x 启动脚本
-|   |-- run_all_40x.ps1                40x 启动脚本
-|   |-- summarize_group_differences.py 从单细胞结果生成组间描述统计
-|   |-- test_yap_40x_trial.py          元数据、泄漏和核周环测试
+|   |-- run_40x_analysis.py            当前 40x YAP 主入口
+|   |-- run_composite_feature_control.py 复合特征开关实验入口
+|   |-- ekin_dapi_yap/                 YAP 分析实现包
+|   |-- tests/                         元数据、泄漏、核周环与显示测试
 |   `-- README.md                      YAP 专项说明
 |-- shared/
 |   |-- __init__.py                    公共模块标识
@@ -79,12 +76,13 @@ extract_docx_text.py 未纳入 Git；tmp_relation_rebuilt.csv 也不是启动入
 解释器选择已有 cellpose 环境：
 C:\Users\dodos\miniforge3\envs\cellpose\python.exe
 
-Ekin：在对应通道目录右键运行 run_baseline.py 或 run_composite.py。
-入口顶部 MAGNIFICATION 默认 "40x"，可改为 "20x"。
-运行配置 Parameters 可传入 --data-root "数据目录" --fit-magnification 20x。
-OCT4 还可指定 --culture-day、--sample、--replicate。
+Ekin OCT4：在 `Ekin_DAPI_OCT4` 右键运行 `run_baseline.py` 或 `run_composite.py`。
+入口顶部 MAGNIFICATION 默认 "40x"，可改为 "20x"；还可指定
+`--culture-day`、`--sample`、`--replicate`。
+Ekin YAP：在 `Ekin_DAPI_YAP` 运行 `run_40x_analysis.py`；当前入口固定为
+40x composite，可传入 `--data-root` 与 `--output-root`。
 --reuse-masks 只复用当前输出目录里已有的掩膜，不自动寻找其他目录。
-旧 .ps1 和试验入口保留兼容，默认 composite，使用它们原有的输出路径。
+OCT4 的旧 .ps1 和试验入口保留兼容，默认 composite，使用原有输出路径。
 
 baseline：既有核形态、DAPI 灰度及邻域统计，不是直接输入原始像素。
 composite：在 baseline 上增加相对 DAPI 异质性、归一化间距、局部拥挤、

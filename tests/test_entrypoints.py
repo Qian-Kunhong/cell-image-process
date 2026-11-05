@@ -7,35 +7,30 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "Ekin_DAPI_YAP"))
 from shared.entrypoint import configured_args
 from shared import dapi_model_a as core
-import yap_40x_trial as yap
+from ekin_dapi_yap import model_a_pipeline as yap
 
 
 class EntryTests(unittest.TestCase):
     def test_modes_and_magnifications_have_separate_outputs(self):
-        for parser in (core.parse_args, yap.parse_args):
-            paths = set()
-            for mode in ("baseline", "composite"):
-                for mag in ("20x", "40x"):
-                    args = configured_args(parser, ROOT, mode, mag, argv=[])
-                    self.assertEqual(args.feature_set, mode)
-                    self.assertEqual(args.fit_magnification, mag)
-                    paths.add(args.output_root)
-            self.assertEqual(len(paths), 4)
+        paths = set()
+        for mode in ("baseline", "composite"):
+            for mag in ("20x", "40x"):
+                args = configured_args(core.parse_args, ROOT, mode, mag, argv=[])
+                self.assertEqual(args.feature_set, mode)
+                self.assertEqual(args.fit_magnification, mag)
+                paths.add(args.output_root)
+        self.assertEqual(len(paths), 4)
 
-    def test_explicit_paths_and_magnification(self):
-        args = configured_args(yap.parse_args, ROOT, "baseline", argv=[
-            "--output-root", "chosen", "--fit-magnification=20x"])
+    def test_yap_entry_is_fixed_to_composite_40x(self):
+        args = yap.parse_args(["--output-root", "chosen"])
         self.assertEqual(args.output_root, Path("chosen"))
-        self.assertEqual(args.fit_magnification, "20x")
+        self.assertEqual(args.fit_magnification, "40x")
+        self.assertEqual(args.feature_set, "composite")
 
     def test_oct4_samples_have_separate_outputs(self):
         a = configured_args(core.parse_args, ROOT, "baseline", argv=["--sample", "Sample 1"])
         b = configured_args(core.parse_args, ROOT, "baseline", argv=["--sample", "Sample 2"])
         self.assertNotEqual(a.output_root, b.output_root)
-
-    def test_conflicting_mode_is_rejected(self):
-        with self.assertRaises(ValueError):
-            configured_args(yap.parse_args, ROOT, "baseline", argv=["--feature-set", "composite"])
 
     def test_model_inputs_really_differ(self):
         import numpy as np

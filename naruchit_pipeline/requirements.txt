@@ -4,6 +4,9 @@ scipy
 scikit-image
 scikit-learn
 matplotlib
+Pillow
+oiffile
+umap-learn
 
 # 按需启用，不要一次全装：装了就写进这里，版本由 pip freeze 固定
 # openpyxl        # 读 .xlsx 必需；cellpose 环境默认没有，pandas.read_excel 会直接失败
@@ -12,4 +15,3 @@ matplotlib
 # xgboost
 # shap
 # SALib
-# umap-learn

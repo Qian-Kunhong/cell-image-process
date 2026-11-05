@@ -26,7 +26,7 @@ from PIL import Image
 from skimage.measure import find_contours
 from skimage.segmentation import find_boundaries
 
-from ekin_dapi_yap.yap_ratio_qc import build_yap_supported_ring_labels
+from ekin_dapi_yap.yap_ratio_qc import build_ring_labels
 
 
 # =========================== SETTINGS: EDIT HERE ============================
@@ -313,8 +313,8 @@ def make_stepwise_method_figures(cells: pd.DataFrame, root: Path, output_dir: Pa
         current_image_id = group_cells.image_id.iloc[0]
         current_yap = np.asarray(Image.open(record.yap_af488_org_path))
         current_mask = np.load(root / "segmentation" / "masks" / f"{current_image_id}_mask.npy")
-        rings, yap_support, _, _, _, _ = build_yap_supported_ring_labels(
-            current_yap, current_mask, outer_fraction=.20, inner_fraction=0.0)
+        rings, _, _, _ = build_ring_labels(
+            current_mask, outer_fraction=.20, inner_fraction=0.0)
         fig = plt.figure(figsize=CANVAS)
         grid = fig.add_gridspec(1, 5, width_ratios=(1, 1, 1, 1, .045), wspace=.055)
         axes = np.asarray([fig.add_subplot(grid[0, index]) for index in range(4)])
@@ -335,9 +335,7 @@ def make_stepwise_method_figures(cells: pd.DataFrame, root: Path, output_dir: Pa
         sampling[current_mask > 0] = (0.0, .70, 1.0, .34)
         sampling[rings > 0] = (0.0, 1.0, .35, .48)
         axes[2].imshow(sampling)
-        for contour in find_contours(yap_support, level=.5):
-            axes[2].plot(contour[:, 1], contour[:, 0], color="#FF2DAA", linewidth=.8)
-        axes[2].set_title("3\nYAP-constrained sampling", fontsize=14, fontweight="bold", pad=8)
+        axes[2].set_title("3\nDAPI-defined sampling", fontsize=14, fontweight="bold", pad=8)
         ratio_canvas = np.full(current_mask.shape, np.nan)
         for cell in group_cells.itertuples(index=False):
             value = getattr(cell, ratio_col)
@@ -353,9 +351,8 @@ def make_stepwise_method_figures(cells: pd.DataFrame, root: Path, output_dir: Pa
                                    label="DAPI nuclear outline"),
                             Patch(facecolor="#00B2FF", alpha=.5, label="DAPI-defined nucleus"),
                             Patch(facecolor="#00FF59", alpha=.5,
-                                  label="YAP-supported nuclear-excluded cytoplasm"),
-                            Line2D([], [], color="#FF2DAA", label="YAP cell/colony contour")],
-                   loc="lower center", ncol=4, frameon=False)
+                                  label="Nuclear-excluded perinuclear ring")],
+                   loc="lower center", ncol=3, frameon=False)
         density = record.seeding_density_cells_per_cm2 / 1000
         density_label = f"{density:g}k cells/cm²"
         fig.suptitle(

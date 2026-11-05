@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from shared.entrypoint import configured_args
-from yap_40x_trial import parse_args, run
+from ekin_dapi_yap.model_a_pipeline import parse_args, run
 
 MAGNIFICATION = "40x"
 OUTPUT_PROFILE = "composite_no_dapi_intensity"

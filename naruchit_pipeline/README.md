@@ -40,6 +40,10 @@ population_features.csv  10 群体 × 200 列
 | `src/rp/population.py` | 细胞级 → 群体级聚合（均值/分位数/离散度/亚群熵） |
 | `scripts/00_...` | 收拢旧仓逐核表为 `cells.csv` |
 | `scripts/01_...` | 聚合到群体级特征表 |
+| `scripts/02_inventory_data_assets.py` | 盘点数据资产：文件级清单 + 单位级计数（不改数据） |
+| `scripts/03_...`–`05_...` | 早期表型总览、均匀性 / UMAP / GMM 与 Ekin 分析范式复算 |
+| `scripts/06_...`–`12_...` | 最终森林图、YAP 箱线图、分割叠图与条件网格图 |
+| `scripts/verify_count_ledger.py` | 核数台账自动核验（1573 / 973 / 991 / 2821 / 868） |
 | `scripts/verify_nucleus_counts.py` | 掩膜 / 逐核表 / 旧汇总三方核数校验 |
 | `analysis_outputs/` | 每次运行一个新时间戳目录，不覆盖 |
 | `tests/` | 11 项单测，只测纯函数与路径 |
@@ -49,6 +53,9 @@ population_features.csv  10 群体 × 200 列
 ```powershell
 $py = "C:\Users\dodos\miniforge3\envs\cellpose\python.exe"
 Set-Location 'C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\naruchit_pipeline'
+
+# 0. 先盘点数据资产（1393 个文件 / 22 类，产物在 analysis_outputs/02_inventory/<时间戳>）
+& $py .\scripts\02_inventory_data_assets.py
 
 # 1. 收拢旧仓逐核表（只读旧仓，不修改）
 & $py .\scripts\00_collect_legacy_nuclei.py
@@ -79,6 +86,7 @@ Set-Location 'C:\Users\dodos\PyCharmMiscProject\surrogate model\cell image\naruc
 | 同日 HA 方案的条件级描述性对比 | 对任何组间差异做显著性检验 |
 | 核数/口径一致性自动校验 | 跨倍率、跨面板特征比较 |
 | 把旧仓资产接进可复现的流水线 | 引用旧文档的 991 核作为基数 |
+| 剂量级（4 档）早期↔后期对齐：IN Cell D0/D3 ↔ D17/D21，RT-PCR D3 ↔ D17/D21（前提是 IN Cell 的 DAPI 分割可用） | 孔级/视野级纵向追踪：免疫染色需固定，不同天数必然换孔；唯一同孔连续的是明场时程，无核通道 |
 
 ## 下一步（对齐交接文档 §8）
 
