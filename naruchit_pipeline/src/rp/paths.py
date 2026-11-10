@@ -5,11 +5,19 @@
 from __future__ import annotations
 
 import json
-import platform
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+CORE_SOURCE_ROOT = REPOSITORY_ROOT / "src"
+if str(CORE_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CORE_SOURCE_ROOT))
+
+from cell_image_core.provenance import (  # noqa: E402
+    make_run_dir as core_make_run_dir,
+    save_run_info as core_save_run_info,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config" / "project.json"
@@ -49,17 +57,8 @@ def make_run_dir(step: str, tag: str = "", base: Path | str | None = None) -> Pa
 
     同一秒内重复调用不会覆盖前一次，而是加 _2、_3 后缀；返回的目录一定新建。
     """
-    cfg = load_config()
-    root = Path(base) if base else Path(cfg["output_root"])
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    name = f"{stamp}_{tag}" if tag else stamp
-    out = root / step / name
-    i = 2
-    while out.exists():
-        out = root / step / f"{name}_{i}"
-        i += 1
-    out.mkdir(parents=True)
-    return out
+    root = Path(base) if base else Path(load_config()["output_root"])
+    return core_make_run_dir(root, step, tag)
 
 
 def save_run_info(
@@ -69,18 +68,10 @@ def save_run_info(
     extra: dict[str, Any] | None = None,
 ) -> Path:
     """把这次运行的脚本、参数、环境写进 run_info.json，供日后复现。"""
-    payload: dict[str, Any] = {
-        "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "script": script or (Path(sys.argv[0]).name if sys.argv else None),
-        "argv": sys.argv[1:],
-        "params": params or {},
-        "python": sys.version.split()[0],
-        "executable": sys.executable,
-        "platform": platform.platform(),
-        "project_root": str(PROJECT_ROOT),
-    }
-    if extra:
-        payload["extra"] = extra
-    out = Path(out_dir) / "run_info.json"
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
+    return core_save_run_info(
+        out_dir,
+        script=script,
+        params=params,
+        extra=extra,
+        project_root=PROJECT_ROOT,
+    )

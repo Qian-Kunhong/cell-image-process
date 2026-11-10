@@ -20,8 +20,16 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 from PIL import Image
-from skimage.measure import regionprops
-from skimage.segmentation import expand_labels, find_boundaries
+from skimage.segmentation import find_boundaries
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+CORE_SOURCE_ROOT = REPOSITORY_ROOT / "src"
+if str(CORE_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CORE_SOURCE_ROOT))
+
+from cell_image_core.features import extract_morphology_2d
+from cell_image_core.io import load_grayscale
+from cell_image_core.segmentation import separate_touching_labels as core_separate_touching_labels
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from .summarize_group_differences import build_descriptive_tables
@@ -279,10 +287,7 @@ def discover_image_sets(root: Path) -> tuple[list[YAPImageSet], pd.DataFrame]:
 
 
 def load_gray(path: Path) -> np.ndarray:
-    image = np.asarray(Image.open(path))
-    if image.ndim != 2:
-        raise ValueError(f"Expected grayscale _ORG PNG, got shape={image.shape}: {path}")
-    return image.astype(np.float32)
+    return load_grayscale(path, dtype=np.float32)
 
 
 def validate_morphology_feature_names(columns) -> None:
@@ -307,24 +312,7 @@ def validate_morphology_feature_names(columns) -> None:
 
 
 def separate_touching_labels(mask: np.ndarray) -> np.ndarray:
-    """Insert background only where two different Cellpose labels directly touch."""
-    if mask.ndim != 2 or not np.issubdtype(mask.dtype, np.integer):
-        raise ValueError("Expected a 2D integer label mask")
-    contacts = np.zeros(mask.shape, dtype=bool)
-    height, width = mask.shape
-    for row_shift, col_shift in ((1, 0), (0, 1), (1, 1), (1, -1)):
-        src_rows = slice(max(0, -row_shift), min(height, height - row_shift))
-        src_cols = slice(max(0, -col_shift), min(width, width - col_shift))
-        dst_rows = slice(max(0, row_shift), min(height, height + row_shift))
-        dst_cols = slice(max(0, col_shift), min(width, width + col_shift))
-        left = mask[src_rows, src_cols]
-        right = mask[dst_rows, dst_cols]
-        different = (left > 0) & (right > 0) & (left != right)
-        contacts[src_rows, src_cols] |= different
-        contacts[dst_rows, dst_cols] |= different
-    separated = mask.copy()
-    separated[contacts] = 0
-    return separated
+    return core_separate_touching_labels(mask)
 
 
 def cellpose_raw_mask_path(mask_path: Path) -> Path:
@@ -368,72 +356,35 @@ def segment_image_sets(
     return mask_paths
 
 
+
+
 def extract_dapi_features(item: YAPImageSet, mask_path: Path, edge_buffer_px: int = 2) -> pd.DataFrame:
-    if edge_buffer_px < 0:
-        raise ValueError("edge_buffer_px must be nonnegative")
+    """Project adapter over the shared morphology/QC kernel."""
     dapi = load_gray(item.dapi_org_path)
     mask = np.load(mask_path)
-    height, width = dapi.shape
-    rows: list[dict] = []
-    for prop in regionprops(mask, intensity_image=dapi):
-        coords = prop.coords
-        values = dapi[coords[:, 0], coords[:, 1]].astype(float)
-        min_row, min_col, max_row, max_col = prop.bbox
-        area = float(prop.area)
-        perimeter = float(prop.perimeter)
-        major = float(prop.major_axis_length)
-        minor = float(prop.minor_axis_length)
-        touches_border = bool(min_row <= 0 or min_col <= 0 or max_row >= height or max_col >= width)
-        edge_gap = int(min(min_row, min_col, height - max_row, width - max_col))
-        rows.append(
-            {
-                "cell_id": f"{item.image_id}__cell_{int(prop.label):05d}",
-                "experimental_group_label": item.experimental_group_label,
-                **EXPERIMENTAL_GROUP_METADATA[item.experimental_group_label],
-                "seeding_density_folder_label": item.seeding_density_folder_label,
-                "seeding_density_cells_per_cm2": item.seeding_density_cells_per_cm2,
-                "replicate": "not_provided",
-                "magnification": item.magnification,
-                "imaging_condition": f"magnification_{item.magnification}",
-                "image_id": item.image_id,
-                "export_index": item.export_index,
-                "image_set_folder": str(item.folder),
-                "label": int(prop.label),
-                "centroid_row_px": float(prop.centroid[0]),
-                "centroid_col_px": float(prop.centroid[1]),
-                "dapi_org_path": str(item.dapi_org_path),
-                "yap_af488_org_path": str(item.yap_org_path),
-                "merge_image_path": str(item.merge_path),
-                "touches_border": touches_border,
-                "image_edge_gap_px": edge_gap,
-                "edge_buffer_px": edge_buffer_px,
-                "area_px": area,
-                "perimeter_px": perimeter,
-                "equivalent_diameter_px": float(prop.equivalent_diameter_area),
-                "major_axis_length_px": major,
-                "minor_axis_length_px": minor,
-                "aspect_ratio": CORE.safe_div(major, minor),
-                "eccentricity": float(prop.eccentricity),
-                "circularity": CORE.circularity(area, perimeter),
-                "solidity": float(prop.solidity),
-                "extent": float(prop.extent),
-                "dapi_mean_intensity": float(np.mean(values)),
-                "dapi_std_intensity": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
-                "dapi_min_intensity": float(np.min(values)),
-                "dapi_max_intensity": float(np.max(values)),
-                "dapi_intensity_range": float(np.max(values) - np.min(values)),
-            }
-        )
-    frame = pd.DataFrame(rows)
+    metadata = {
+        "experimental_group_label": item.experimental_group_label,
+        **EXPERIMENTAL_GROUP_METADATA[item.experimental_group_label],
+        "seeding_density_folder_label": item.seeding_density_folder_label,
+        "seeding_density_cells_per_cm2": item.seeding_density_cells_per_cm2,
+        "replicate": "not_provided",
+        "magnification": item.magnification,
+        "imaging_condition": f"magnification_{item.magnification}",
+        "export_index": item.export_index,
+        "image_set_folder": str(item.folder),
+        "dapi_org_path": str(item.dapi_org_path),
+        "yap_af488_org_path": str(item.yap_org_path),
+        "merge_image_path": str(item.merge_path),
+    }
+    frame = extract_morphology_2d(
+        mask,
+        dapi,
+        image_id=item.image_id,
+        edge_buffer_px=edge_buffer_px,
+        metadata=metadata,
+    )
     if frame.empty:
         return frame
-    frame["qc_keep"] = frame["image_edge_gap_px"] > edge_buffer_px
-    frame["qc_reason"] = np.where(
-        frame["touches_border"], "touches_border",
-        np.where(frame["qc_keep"], "keep", f"within_{edge_buffer_px}px_image_edge"),
-    )
-    # Incomplete nuclei must not supply area/shape values to neighbors either.
-    # Raw masks remain in use as occupancy exclusions for YAP ring sampling.
     kept = frame.loc[frame["qc_keep"]].reset_index(drop=True)
     if not kept.empty:
         kept = CORE.add_composite_features(CORE.add_spatial_features(kept))

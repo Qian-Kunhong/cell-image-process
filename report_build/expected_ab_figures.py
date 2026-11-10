@@ -1,11 +1,20 @@
+"""预期结果示意图（A/B 两套方案）。
+
+!! 本脚本里的比例、效应量、均值、标准差全部是手写的示意值，箱线图由随机数生成。
+!! 不是实测数据，不能当实验结果引用。所有图上都会打 SIMULATED 水印，
+!! 输出目录也叫 SIMULATED_expected_AB，避免和真实结果混在一起。
+"""
 from pathlib import Path
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-OUT=Path(__file__).resolve().parents[1]/'reports'/'expected_AB_figures'
+OUT=Path(__file__).resolve().parents[1]/'reports'/'SIMULATED_expected_AB'
 OUT.mkdir(parents=True,exist_ok=True)
+(OUT/'README.txt').write_text(
+    '本目录全部图片为“预期结果示意图”，数据由 expected_ab_figures.py 手写/随机生成，\n'
+    '不是任何实测结果，不得作为实验证据引用。\n', encoding='utf-8')
 plt.rcParams.update({'font.family':'DejaVu Sans','font.size':12,'axes.titlesize':15,'axes.titleweight':'bold','savefig.facecolor':'white'})
 rng=np.random.default_rng(20261105)
 features=['Neighbor heterogeneity','Local crowding','Nuclear spacing','Circularity','Elongation','Nuclear area']
@@ -19,7 +28,15 @@ specs={
           effects=[[.04,.10,-.06,-.05,.01,-.09],[.10,.23,-.17,-.15,.04,-.25],[.16,.34,-.25,-.22,.06,-.35]],
           means=[.58,.45,.27,.12],sds=[.31,.34,.37,.40],colors=['#606060','#4289B0','#C444AC','#22AEBB'])
 }
+def stamp(fig):
+    """在图上打不可忽略的 SIMULATED 标记，防止被误当成实测结果。"""
+    fig.text(.5,.5,'SIMULATED',fontsize=62,color='#C00000',alpha=.16,
+             ha='center',va='center',rotation=24,zorder=100)
+    fig.text(.99,.012,'SIMULATED — not measured data',
+             ha='right',va='bottom',fontsize=9,color='#C00000')
+
 def save(fig,name):
+    stamp(fig)
     fig.savefig(OUT/(name+'.png'),dpi=220,bbox_inches='tight',pad_inches=.14)
     fig.savefig(OUT/(name+'.svg'),bbox_inches='tight',pad_inches=.14)
     plt.close(fig)

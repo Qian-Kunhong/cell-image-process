@@ -3,6 +3,14 @@ import numpy as np
 import tifffile as tiff
 from cellpose import models
 import time
+import sys
+
+CORE_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src"
+if str(CORE_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CORE_SOURCE_ROOT))
+
+from cell_image_core.io import normalize_percentile_uint8, to_three_channel as core_to_three_channel
+from cell_image_core.segmentation import label_boundaries_4connected
 
 # ===== 输入/输出 =====
 # 你已经把筛选后的文件复制回原目录，所以继续用原目录
@@ -50,10 +58,13 @@ FILE_GLOB = "*.tif"
 
 
 def normalize_to_u8(img: np.ndarray) -> np.ndarray:
-    img = img.astype(np.float32)
-    p1, p99 = np.percentile(img, [1, 99])
-    img = np.clip((img - p1) / (p99 - p1 + 1e-6), 0, 1)
-    return (img * 255).astype(np.uint8)
+    return normalize_percentile_uint8(
+        img,
+        denominator_floor=0.0,
+        denominator_offset=1e-6,
+        round_values=False,
+        finite_only=False,
+    )
 
 
 def to_three_channel(img: np.ndarray) -> np.ndarray:
@@ -61,25 +72,7 @@ def to_three_channel(img: np.ndarray) -> np.ndarray:
     CP4 / Cellpose-SAM更适合按3通道输入。
     对单通道DAPI图，直接复制成3通道。
     """
-    if img.ndim == 2:
-        return np.stack([img, img, img], axis=-1)
-
-    if img.ndim == 3:
-        # 已经是 HWC 且 C=3
-        if img.shape[-1] == 3:
-            return img
-        # 单通道 HWC
-        if img.shape[-1] == 1:
-            return np.repeat(img, 3, axis=-1)
-        # CHW 且 C=3
-        if img.shape[0] == 3 and img.shape[-1] != 3:
-            return np.moveaxis(img, 0, -1)
-        # CHW 且 C=1
-        if img.shape[0] == 1 and img.shape[-1] != 1:
-            x = np.moveaxis(img, 0, -1)
-            return np.repeat(x, 3, axis=-1)
-
-    raise ValueError(f"Unsupported image shape for CP4 input: {img.shape}")
+    return core_to_three_channel(img)
 
 
 def make_preview(img_gray: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -90,9 +83,7 @@ def make_preview(img_gray: np.ndarray, mask: np.ndarray) -> np.ndarray:
     rgb = np.stack([base, base, base], axis=-1)
 
     # 简单边界：相邻像素标签不同的位置
-    boundary = np.zeros_like(mask, dtype=bool)
-    boundary[:-1, :] |= mask[:-1, :] != mask[1:, :]
-    boundary[:, :-1] |= mask[:, :-1] != mask[:, 1:]
+    boundary = label_boundaries_4connected(mask)
 
     rgb[boundary] = np.array([255, 0, 0], dtype=np.uint8)
     return rgb

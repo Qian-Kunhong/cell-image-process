@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,10 +22,18 @@ if str(DEPENDENCY_DIR) not in sys.path:
 import oiffile  # noqa: E402
 
 
-RAW_DIR = Path(
-    r"F:\Naruchit data\1_Data of published manuscripts\3_Hepatocyte differentiation"
-    r"\03_Raw data\Immunostaining\Confocal - YAP"
-)
+def _data_root() -> Path:
+    """数据根从 naruchit_pipeline/config/project.json 读；可用 NARUCHIT_DATA_ROOT 覆盖。"""
+    override = os.environ.get("NARUCHIT_DATA_ROOT")
+    if override:
+        return Path(override)
+    cfg = WORKSPACE / "naruchit_pipeline" / "config" / "project.json"
+    if not cfg.exists():
+        raise RuntimeError(f"找不到配置 {cfg}，也没有设置 NARUCHIT_DATA_ROOT")
+    return Path(json.loads(cfg.read_text(encoding="utf-8-sig"))["data_root"])
+
+
+RAW_DIR = _data_root() / "03_Raw data" / "Immunostaining" / "Confocal - YAP"
 ANALYSIS_ROOT = (
     WORKSPACE / "analysis_outputs" / "hepatocyte_confocal_audit" / "dapi_3d" / "yap"
 )

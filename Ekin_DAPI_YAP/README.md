@@ -36,7 +36,9 @@ outputs/composite_no_dapi_intensity/40x/all_fields/
 - DAPI 图像仍用于核分割；
 - YAP 永远不进入形态模型。
 
-内部主流程集中在 `ekin_dapi_yap/` 包内，一般不需要直接运行或修改。
+内部主流程集中在 `ekin_dapi_yap/` 包内；图像读取、标签后处理、边缘 QC、
+2D 形态和邻域计算来自仓库的 `src/cell_image_core/`，项目包只补充实验元数据、
+YAP 后表征、模型选择和展示。
 
 ## 生成展示图
 

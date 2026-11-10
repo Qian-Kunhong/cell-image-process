@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cell-image-core"
+version = "0.1.0"
+description = "Project-neutral computation kernels for the cell-image analysis repository"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pandas",
+  "Pillow",
+  "scipy",
+  "scikit-image",
+]
+
+[project.optional-dependencies]
+analysis = [
+  "cellpose",
+  "matplotlib",
+  "scikit-learn",
+  "tifffile",
+  "umap-learn",
+]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cell_image_core*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "Ekin_DAPI_YAP", "naruchit_pipeline/src"]
+testpaths = ["tests", "Ekin_DAPI_YAP/tests", "naruchit_pipeline/tests"]
+

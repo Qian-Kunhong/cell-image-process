@@ -3,11 +3,19 @@ import math
 import re
 import runpy
 import warnings
+import sys
 
 import numpy as np
 import pandas as pd
 import tifffile as tiff
 from skimage.measure import regionprops
+
+CORE_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src"
+if str(CORE_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CORE_SOURCE_ROOT))
+
+from cell_image_core.features import circularity as core_circularity
+from cell_image_core.io import ensure_2d_image as core_ensure_2d_image
 
 # ===== 可选：优先使用 scipy 的 KDTree，加速近邻计算 =====
 try:
@@ -93,23 +101,7 @@ def ensure_2d_image(img: np.ndarray) -> np.ndarray:
     将图像转成 2D 灰度图。
     Convert input image to 2D grayscale.
     """
-    if img.ndim == 2:
-        return img
-
-    if img.ndim == 3:
-        # HWC, 单通道
-        if img.shape[-1] == 1:
-            return img[..., 0]
-        # HWC, 多通道 -> 取第一通道（DAPI通常就是单通道）
-        if img.shape[-1] in (3, 4):
-            return img[..., 0]
-        # CHW
-        if img.shape[0] == 1:
-            return img[0]
-        if img.shape[0] in (3, 4):
-            return img[0]
-
-    raise ValueError(f"Unsupported image shape: {img.shape}")
+    return core_ensure_2d_image(img, channel_index=0)
 
 
 def find_matching_image(mask_path: Path) -> Path | None:
@@ -239,9 +231,7 @@ def circularity(area: float, perimeter: float) -> float:
     """
     4πA / P²
     """
-    if perimeter is None or perimeter <= 0:
-        return np.nan
-    return 4.0 * math.pi * area / (perimeter ** 2)
+    return core_circularity(area, perimeter)
 
 
 def bbox_aspect_ratio(min_row, min_col, max_row, max_col) -> float:

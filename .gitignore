@@ -24,6 +24,7 @@ Thumbs.db
 analysis_outputs/
 build_ppt/previews_*/
 tmp/
+validation_runs/
 .codex_deps/
 *.npy
 *.npz

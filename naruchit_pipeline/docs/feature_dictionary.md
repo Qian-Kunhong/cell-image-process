@@ -23,6 +23,7 @@
 | `eccentricity` | 椭圆离心率 | 无量纲 | 大 = 细长 | 与 `aspect_ratio` | 二选一 |
 | `height_um` | 3D 核的轴向高度 | µm | 大 = 核厚 | 与 `volume` | Y（仅 3D 数据） |
 | `volume_um3` | 3D 核体积 | µm³ | 大 = 核大 | 与 `area` r≈0.77（2D 代理） | Y（仅 3D 数据） |
+| `pca_elongation_1_over_3` | 3D 点云第一/第三主轴长度比 | 无量纲 | 大 = 三维形状更细长 | 与 PCA 三轴长度相关 | Y（仅 3D 数据；不用时不同时放三条 PCA 轴） |
 
 ## 强度/纹理类
 
@@ -50,8 +51,8 @@
 | `<feat>__mean` | 孔内均值 | 同源特征 | — | Y（基线） |
 | `<feat>__std` / `__iqr` / `__cv` | 孔内离散度 | 同源特征 | 大 = 异质性高 | Y |
 | `<feat>__q10..q90` | 孔内分位数 | 同源特征 | 描述分布形状 | Y |
-| `cluster__share_<k>` | 亚群占比 | 比例 | — | Y |
-| `cluster__entropy` | 亚群组成熵 | nats | 大 = 组成更混合 | Y |
+| `cluster__share_<k>` | 可选外部簇标签的占比 | 比例 | 仅当簇定义已独立验证时使用 | N |
+| `cluster__entropy` | 可选外部簇标签的组成熵 | nats | 当前主流程不使用 | N |
 
 ## 禁止事项
 

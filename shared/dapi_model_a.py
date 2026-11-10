@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+CORE_SOURCE_ROOT = REPOSITORY_ROOT / "src"
+if str(CORE_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CORE_SOURCE_ROOT))
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -23,7 +28,6 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 from PIL import Image
-from scipy.spatial import cKDTree
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import adjusted_rand_score, silhouette_score
@@ -31,6 +35,19 @@ from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import RobustScaler
 from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries
+
+from cell_image_core.features import (
+    add_composite_features as core_add_composite_features,
+    add_spatial_features as core_add_spatial_features,
+    circularity as core_circularity,
+    fixed_radius_neighbor_count as core_fixed_radius_neighbor_count,
+    safe_div as core_safe_div,
+)
+from cell_image_core.io import (
+    load_rgb_channel,
+    normalize_percentile_uint8,
+)
+from cell_image_core.segmentation import load_cellpose_model as core_load_cellpose_model
 
 
 DEFAULT_DATA_ROOT = Path(
@@ -304,18 +321,11 @@ def discover_image_pairs(
 
 
 def load_effective_channel(path: Path, channel: str) -> np.ndarray:
-    image = np.asarray(Image.open(path))
-    if image.ndim != 3 or image.shape[2] < 3:
-        raise ValueError(f"Expected RGB PNG, got shape={image.shape}: {path}")
-    channel_index = {"red": 0, "green": 1, "blue": 2}[channel]
-    return image[..., channel_index].astype(np.float32)
+    return load_rgb_channel(path, channel, dtype=np.float32)
 
 
 def normalize_to_uint8(image: np.ndarray) -> np.ndarray:
-    arr = np.asarray(image, dtype=np.float32)
-    p1, p99 = np.percentile(arr[np.isfinite(arr)], [1, 99])
-    scaled = np.clip((arr - p1) / max(float(p99 - p1), 1e-6), 0.0, 1.0)
-    return np.round(scaled * 255.0).astype(np.uint8)
+    return normalize_percentile_uint8(image, round_values=True, finite_only=True)
 
 
 def save_mask_overlay(image: np.ndarray, mask: np.ndarray, path: Path) -> None:
@@ -328,9 +338,7 @@ def save_mask_overlay(image: np.ndarray, mask: np.ndarray, path: Path) -> None:
 
 
 def load_cellpose_model(use_gpu: bool):
-    from cellpose import models
-
-    return models.CellposeModel(gpu=use_gpu, pretrained_model="cpsam")
+    return core_load_cellpose_model(use_gpu=use_gpu, pretrained_model="cpsam")
 
 
 def segment_pairs(
@@ -371,126 +379,26 @@ def segment_pairs(
 
 
 def safe_div(a: float, b: float) -> float:
-    return float(a / b) if np.isfinite(b) and b > 0 else np.nan
+    return core_safe_div(a, b)
 
 
 def circularity(area: float, perimeter: float) -> float:
-    return safe_div(4.0 * math.pi * area, perimeter * perimeter)
+    return core_circularity(area, perimeter)
 
 
 def fixed_radius_neighbor_count(coords: np.ndarray, radius: float) -> np.ndarray:
-    if len(coords) == 0:
-        return np.array([], dtype=int)
-    tree = cKDTree(coords)
-    return np.asarray(
-        [len(tree.query_ball_point(coords[i], r=radius)) - 1 for i in range(len(coords))],
-        dtype=int,
-    )
+    return core_fixed_radius_neighbor_count(coords, radius)
+
+
 
 
 def add_spatial_features(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    n = len(out)
-    spatial_columns = [
-        "nn1_distance_px",
-        "knn6_distance_mean_px",
-        "knn6_distance_std_px",
-        "local_density_per_px2",
-        "adaptive_neighbor_count",
-        "nb_area_mean_px2",
-        "nb_area_std_px2",
-        "nb_circularity_mean",
-        "nb_circularity_std",
-        "nb_eccentricity_mean",
-        "nb_eccentricity_std",
-        "nb_aspect_ratio_mean",
-        "nb_aspect_ratio_std",
-        "nb_dapi_mean_intensity_mean",
-        "nb_dapi_mean_intensity_std",
-        "fixed_neighbor_count",
-        "local_crowding_area_fraction_proxy",
-        "neighbor_size_log_disagreement",
-        "neighbor_shape_disagreement",
-        "neighborhood_angular_asymmetry",
-    ]
-    for col in spatial_columns:
-        out[col] = np.nan
-    if n <= 1:
-        out["adaptive_neighbor_count"] = 0
-        out["fixed_neighbor_count"] = 0
-        return out
-
-    coords = out[["centroid_row_px", "centroid_col_px"]].to_numpy(dtype=float)
-    tree = cKDTree(coords)
-    k_eff = min(K_NEIGHBORS, n - 1)
-    distances, indices = tree.query(coords, k=k_eff + 1)
-    distances = np.atleast_2d(distances)
-    indices = np.atleast_2d(indices)
-
-    area = out["area_px"].to_numpy(dtype=float)
-    circ = out["circularity"].to_numpy(dtype=float)
-    ecc = out["eccentricity"].to_numpy(dtype=float)
-    aspect = out["aspect_ratio"].to_numpy(dtype=float)
-    dapi_mean = out["dapi_mean_intensity"].to_numpy(dtype=float)
-
-    for i in range(n):
-        d = np.asarray(distances[i][1:], dtype=float)
-        idx = np.asarray(indices[i][1:], dtype=int)
-        if len(d) == 0:
-            continue
-        radius = float(d[-1])
-        neighbors = np.asarray(
-            [j for j in tree.query_ball_point(coords[i], r=radius + 1e-8) if j != i],
-            dtype=int,
-        )
-        out.at[i, "nn1_distance_px"] = float(d[0])
-        out.at[i, "knn6_distance_mean_px"] = float(np.mean(d))
-        out.at[i, "knn6_distance_std_px"] = float(np.std(d, ddof=1)) if len(d) > 1 else 0.0
-        out.at[i, "adaptive_neighbor_count"] = int(len(neighbors))
-        out.at[i, "local_density_per_px2"] = safe_div(len(neighbors), math.pi * radius * radius)
-        if len(neighbors) == 0:
-            continue
-
-        vectors = coords[neighbors] - coords[i]
-        norms = np.linalg.norm(vectors, axis=1)
-        unit = vectors[norms > 0] / norms[norms > 0, None]
-        out.at[i, "neighborhood_angular_asymmetry"] = (
-            float(np.linalg.norm(np.mean(unit, axis=0))) if len(unit) else np.nan
-        )
-        out.at[i, "neighbor_size_log_disagreement"] = float(
-            np.nanmedian(np.abs(np.log(np.maximum(area[neighbors], 1e-12) / max(area[i], 1e-12))))
-        )
-        out.at[i, "neighbor_shape_disagreement"] = float(
-            np.nanmedian(np.sqrt((circ[neighbors] - circ[i]) ** 2 + (ecc[neighbors] - ecc[i]) ** 2))
-        )
-        out.at[i, "local_crowding_area_fraction_proxy"] = float(
-            np.nansum(area[neighbors]) / (math.pi * radius * radius)
-        )
-
-        for values, mean_col, std_col in [
-            (area, "nb_area_mean_px2", "nb_area_std_px2"),
-            (circ, "nb_circularity_mean", "nb_circularity_std"),
-            (ecc, "nb_eccentricity_mean", "nb_eccentricity_std"),
-            (aspect, "nb_aspect_ratio_mean", "nb_aspect_ratio_std"),
-            (dapi_mean, "nb_dapi_mean_intensity_mean", "nb_dapi_mean_intensity_std"),
-        ]:
-            vals = values[neighbors]
-            out.at[i, mean_col] = float(np.nanmean(vals))
-            out.at[i, std_col] = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
-
-    median_eqdiam = float(np.nanmedian(out["equivalent_diameter_px"]))
-    radius = 2.5 * median_eqdiam
-    out["fixed_neighbor_count"] = fixed_radius_neighbor_count(coords, radius)
-    return out
+    """Compatibility wrapper around the project-neutral computation kernel."""
+    return core_add_spatial_features(df, k_neighbors=K_NEIGHBORS)
 
 
 def add_composite_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add reproducible, dimensionless DAPI morphology/spatial proxies.
-
-    Size is normalized within an image, so image identifiers determine only the
-    reference median and are never numerical model inputs.  No marker channel or
-    experimental metadata is read here.
-    """
+    """Compatibility wrapper preserving the historical input validation."""
     required = set(MODEL_FEATURES) | {
         "image_id", "local_crowding_area_fraction_proxy",
         "neighbor_size_log_disagreement", "neighbor_shape_disagreement",
@@ -499,23 +407,7 @@ def add_composite_features(df: pd.DataFrame) -> pd.DataFrame:
     missing = sorted(required.difference(df.columns))
     if missing:
         raise KeyError(f"Missing inputs for composite features: {missing}")
-    out = df.copy()
-    area = pd.to_numeric(out["area_px"], errors="coerce").clip(lower=1e-12)
-    image_median_area = area.groupby(out["image_id"], sort=False).transform("median").clip(lower=1e-12)
-    mean_i = pd.to_numeric(out["dapi_mean_intensity"], errors="coerce").abs().clip(lower=1e-12)
-    out["nuclear_size_log_ratio"] = np.log(area / image_median_area)
-    out["nuclear_elongation_log"] = np.log(pd.to_numeric(out["aspect_ratio"], errors="coerce").clip(lower=1.0))
-    out["boundary_irregularity"] = (
-        pd.to_numeric(out["perimeter_px"], errors="coerce") /
-        (2.0 * np.sqrt(math.pi * area)) - 1.0
-    )
-    out["convexity_deficit"] = 1.0 - pd.to_numeric(out["solidity"], errors="coerce")
-    out["chromatin_cv_proxy"] = pd.to_numeric(out["dapi_std_intensity"], errors="coerce") / mean_i
-    out["chromatin_range_ratio"] = pd.to_numeric(out["dapi_intensity_range"], errors="coerce") / mean_i
-    out["nearest_spacing_nuclear_units"] = (
-        pd.to_numeric(out["nn1_distance_px"], errors="coerce") /
-        pd.to_numeric(out["equivalent_diameter_px"], errors="coerce").clip(lower=1e-12)
-    )
+    out = core_add_composite_features(df)
     validate_model_feature_names(COMPOSITE_FEATURES)
     return out
 

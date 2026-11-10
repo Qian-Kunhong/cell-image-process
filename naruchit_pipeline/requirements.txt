@@ -1,17 +1,21 @@
-numpy
-pandas
-scipy
-scikit-image
-scikit-learn
-matplotlib
-Pillow
-oiffile
-umap-learn
+# 主流程（naruchit_pipeline/src/rp 与 scripts 03–12）依赖
+# 版本取自 2026-11-06 的实际运行环境（miniforge3\envs\cellpose）
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-image==0.25.2
+scikit-learn==1.7.2
+matplotlib==3.10.8
+Pillow==12.1.0
+umap-learn==0.5.11
 
-# 按需启用，不要一次全装：装了就写进这里，版本由 pip freeze 固定
+# oiffile 在本机是 vendored 在 .codex_deps\oiffile（被 git 忽略），换机器要自己装：
+# oiffile
+
+# 按需启用，不要一次全装：装了就把版本写进这里
+# cellpose        # analyze_best_focus_2d_vs_3d_volume.py（最佳焦平面分割）
+# opencv-python   # 同上（读图/缩放）
+# python-docx     # report_build\* 与 draft_audit.py（写/读 .docx）
 # openpyxl        # 读 .xlsx 必需；cellpose 环境默认没有，pandas.read_excel 会直接失败
 # tifffile
-# cellpose
-# xgboost
-# shap
-# SALib
+# xgboost / shap / SALib   # 旧仓的预测与敏感性分析，新流程不用

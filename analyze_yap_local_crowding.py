@@ -158,22 +158,6 @@ def within_field_residual(frame: pd.DataFrame, column: str) -> pd.Series:
     return frame[column] - frame.groupby("field_id")[column].transform("median")
 
 
-def permutation_pvalue(frame: pd.DataFrame, x_col: str, y_col: str, observed: float, n_iter: int = 1000) -> float:
-    rng = np.random.default_rng(20261027)
-    x = frame[x_col].to_numpy()
-    y = frame[y_col].to_numpy()
-    groups = frame["field_id"].to_numpy()
-    indices = [np.flatnonzero(groups == group) for group in np.unique(groups)]
-    extreme = 0
-    for _ in range(n_iter):
-        shuffled = y.copy()
-        for idx in indices:
-            shuffled[idx] = rng.permutation(shuffled[idx])
-        rho = spearmanr(x, shuffled).statistic
-        extreme += abs(rho) >= abs(observed)
-    return (extreme + 1) / (n_iter + 1)
-
-
 def save_qc_figure(qc: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]]) -> Path:
     fig, axes = plt.subplots(len(qc), 3, figsize=(10, 3 * len(qc)), constrained_layout=True)
     if len(qc) == 1:
@@ -330,12 +314,8 @@ def main() -> None:
     validation = pd.DataFrame(validation_rows)
 
     within_rho = float(spearmanr(cells["local_fraction_within_field"], cells["log2_ratio_within_field"]).statistic)
-    permutation_p = permutation_pvalue(
-        cells,
-        "local_fraction_within_field",
-        "log2_ratio_within_field",
-        within_rho,
-    )
+    # 不再给核级 permutation p：统计单位是视野，一个条件只有一个视野，
+    # 把核当独立样本（哪怕在视野内置换）也会伪造样本量。
     field_rho = float(spearmanr(field_stats["nuclei_per_10000_um2"], field_stats["ratio_median"]).statistic)
     field_p = float(spearmanr(field_stats["nuclei_per_10000_um2"], field_stats["ratio_median"]).pvalue)
     count_validation = spearmanr(validation["recomputed_count"], validation["existing_count"])
@@ -363,7 +343,6 @@ def main() -> None:
         "field_median_ratio_validation_spearman_rho": float(ratio_validation.statistic),
         "field_median_ratio_validation_p": float(ratio_validation.pvalue),
         "within_field_crowding_ratio_spearman_rho": within_rho,
-        "within_field_permutation_p": permutation_p,
         "median_log2_ratio_difference_high_vs_low_crowding_quartile": qdiff_median,
         "paired_field_wilcoxon_p": qdiff_p,
         "field_density_vs_field_median_ratio_spearman_rho": field_rho,

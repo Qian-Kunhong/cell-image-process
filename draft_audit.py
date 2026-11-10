@@ -1,12 +1,19 @@
 # -*- coding: utf-8 -*-
-"""按 PROJECT_RULES.md 第4节对已交付文档做一次机械自检，输出问题清单。"""
+"""按 PROJECT_RULES.md 第4节对已交付文档做一次机械自检，输出问题清单。
+
+用法：python draft_audit.py [docx 路径 ...]
+不给路径时读环境变量 DRAFT_DIR（默认 E:\\Kino-oka Lab\\2026 discussion）。
+"""
 import re, sys, os
+from pathlib import Path
 from docx import Document
 
-DOCS = [
-    r"E:\Kino-oka Lab\2026 discussion\Original paper story - hepatocyte differentiation (Nov 2026).docx",
-    r"E:\Kino-oka Lab\2026 discussion\Future plan - hepatocyte differentiation (Nov 2026).docx",
+DEFAULT_DIR = Path(os.environ.get("DRAFT_DIR", r"E:\Kino-oka Lab\2026 discussion"))
+DOC_NAMES = [
+    "Original paper story - hepatocyte differentiation (Nov 2026).docx",
+    "Future plan - hepatocyte differentiation (Nov 2026).docx",
 ]
+DOCS = [str(p) for p in (Path(a) for a in sys.argv[1:])] or [str(DEFAULT_DIR / n) for n in DOC_NAMES]
 
 META = ["需要强调", "这句话", "换句话", "推理的桥梁", "仅支持", "值得注意的是",
         "也就是说", "如前所述", "不言而喻", "换句话说", "简单来说", "可以说"]

@@ -1,25 +1,44 @@
 """核对 docs/counting_ledger.md 里六个核数口径是否与原始文件一致。
 
 用法：python scripts\verify_count_ledger.py
-任一数字与台账不符 → 返回码 1，并打印实测值。
+台账里的数字由本脚本从 markdown 读出来现算比对；台账写错、行被删掉都会 FAIL。
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-EXPECTED = {
-    "raw_3d": 1573,      # raw_labels 唯一值合计
-    "valid_3d": 973,     # labels 唯一值合计 = 逐核表行数
-    "legacy_sum": 991,   # 旧汇总 n_nuclei 求和（弃用，仅核对）
-    "yap_2d": 2821,      # Ana_*/*_Nuclei.csv 行数合计
-    "matched": 868,      # 2D-3D 匹配核
-    "mask_2d": 1190,     # masks_2d\*_best_focus_2d_mask.npz 的 labels 唯一值合计（9 样本为 1182）
+LEDGER = Path(__file__).resolve().parent.parent / "docs" / "counting_ledger.md"
+
+# 台账表格里的中文标签 → 内部口径名。改台账措辞时要同步改这里。
+LABEL_TO_KEY = {
+    "3D 原始检测": "raw_3d",
+    "3D 有效核": "valid_3d",
+    "旧汇总口径": "legacy_sum",
+    "2D 切片上的核": "yap_2d",
+    "2D–3D 匹配核": "matched",
+    "最佳焦平面 2D 掩膜核": "mask_2d",
 }
+ROW = re.compile(r"^\|\s*\*\*(\d+)\*\*\s*\|\s*(.+?)\s*\|", re.MULTILINE)
+
+
+def read_ledger(path: Path = LEDGER) -> dict[str, int]:
+    """从台账表格抽出六个数字；缺项直接报错，避免脚本在没有台账时静默 PASS。"""
+    text = path.read_text(encoding="utf-8-sig")
+    found: dict[str, int] = {}
+    for number, label in ROW.findall(text):
+        key = LABEL_TO_KEY.get(label)
+        if key:
+            found[key] = int(number)
+    missing = sorted(set(LABEL_TO_KEY.values()) - set(found))
+    if missing:
+        raise RuntimeError(f"台账里缺这些口径的数字：{missing}（{path}）")
+    return found
 
 
 def load_paths():
@@ -73,6 +92,7 @@ def count_mask_2d(yap3d: Path) -> int:
 
 
 def main() -> int:
+    expected = read_ledger()
     yap3d, yap2d = load_paths()
     raw, valid, rows = count_3d(yap3d)
     actual = {
@@ -85,7 +105,7 @@ def main() -> int:
     }
     print(f"{'口径':<12}{'台账':>6}{'实测':>6}  状态")
     bad = []
-    for k, exp in EXPECTED.items():
+    for k, exp in expected.items():
         act = actual[k]
         ok = act == exp
         print(f"{k:<12}{exp:>6}{act:>6}  {'OK' if ok else 'MISMATCH'}")

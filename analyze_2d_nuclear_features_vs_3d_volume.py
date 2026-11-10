@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,10 +20,18 @@ if str(DEPENDENCY_DIR) not in sys.path:
 import oiffile  # noqa: E402
 
 
-RAW_DIR = Path(
-    r"F:\Naruchit data\1_Data of published manuscripts\3_Hepatocyte differentiation"
-    r"\03_Raw data\Immunostaining\Confocal - YAP"
-)
+def _data_root() -> Path:
+    """数据根从 naruchit_pipeline/config/project.json 读；可用 NARUCHIT_DATA_ROOT 覆盖。"""
+    override = os.environ.get("NARUCHIT_DATA_ROOT")
+    if override:
+        return Path(override)
+    cfg = WORKSPACE / "naruchit_pipeline" / "config" / "project.json"
+    if not cfg.exists():
+        raise RuntimeError(f"找不到配置 {cfg}，也没有设置 NARUCHIT_DATA_ROOT")
+    return Path(json.loads(cfg.read_text(encoding="utf-8-sig"))["data_root"])
+
+
+RAW_DIR = _data_root() / "03_Raw data" / "Immunostaining" / "Confocal - YAP"
 ANALYSIS_ROOT = (
     WORKSPACE / "analysis_outputs" / "hepatocyte_confocal_audit" / "dapi_3d" / "yap"
 )
@@ -177,20 +186,21 @@ def extract_sample_features(sample: str, accepted: pd.DataFrame) -> tuple[pd.Dat
 
 
 def safe_correlations(frame: pd.DataFrame, x: str, y: str = "volume_um3") -> dict:
+    """核级相关系数（只报效应量与 n，**不报 p 值**）。
+
+    统计单位是视野，每个条件只有 1 个视野：把核当独立样本算 p 值会伪造样本量
+    （同一视野内的核彼此不独立），因此本流水线不提供任何核级显著性检验。
+    rho / r 只作"同一张图内两个测量量的描述性关联"，不能当组间推断。
+    """
     pair = frame[[x, y]].replace([np.inf, -np.inf], np.nan).dropna()
     if len(pair) < 4 or pair[x].nunique() < 2 or pair[y].nunique() < 2:
-        return {
-            "n": int(len(pair)), "spearman_rho": np.nan, "spearman_p": np.nan,
-            "pearson_r": np.nan, "pearson_p": np.nan,
-        }
+        return {"n": int(len(pair)), "spearman_rho": np.nan, "pearson_r": np.nan}
     sr = spearmanr(pair[x], pair[y])
     pr = pearsonr(pair[x], pair[y])
     return {
         "n": int(len(pair)),
         "spearman_rho": float(sr.statistic),
-        "spearman_p": float(sr.pvalue),
         "pearson_r": float(pr.statistic),
-        "pearson_p": float(pr.pvalue),
     }
 
 

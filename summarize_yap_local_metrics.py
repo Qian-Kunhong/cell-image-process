@@ -47,7 +47,8 @@ def main() -> None:
                 "interpretation": interpretation,
                 "n_cells": len(cells),
                 "pooled_within_field_rho": pooled.statistic,
-                "pooled_p": pooled.pvalue,
+                # 不输出 p 值：统计单位是视野，一个条件只有一个视野，
+                # 把核当独立样本算 p 会伪造样本量（同视野内的核彼此不独立）。
                 "n_fields": len(field_rhos),
                 "median_field_rho": float(np.nanmedian(field_rhos)),
                 "fraction_fields_same_direction_as_pooled": float(
@@ -71,7 +72,7 @@ def main() -> None:
                 "n_cells": len(group),
                 "n_fields": group["field_id"].nunique(),
                 "within_field_rho": result.statistic,
-                "p": result.pvalue,
+                # 同上：这里的"样本"仍是视野（见 n_fields），不给核级 p 值
             }
         )
     stage_output = pd.DataFrame(stage_rows)

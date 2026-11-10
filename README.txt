@@ -17,6 +17,8 @@ cell image/
 |-- README.txt                         本总说明，优先阅读
 |-- README.md                          仓库首页索引
 |-- .gitignore                         排除结果、掩膜、缓存
+|-- pyproject.toml                     公共包与测试路径配置
+|-- src/cell_image_core/               项目无关的 IO/分割后处理/特征/QC/汇总内核
 |-- Suzui/
 |   |-- README.md                      Suzui 专项说明
 |   |-- DAPI/
@@ -61,8 +63,8 @@ cell image/
 |   `-- README.md                      YAP 专项说明
 |-- shared/
 |   |-- __init__.py                    公共模块标识
-|   |-- dapi_model_a.py                Ekin 共用特征/PCA/GMM/绘图核心；
-|   |                                 当前也包含 OCT4/BASC 工作流实现
+|   |-- dapi_model_a.py                Ekin OCT4 兼容层、PCA/GMM/绘图；
+|   |                                 基础计算已调用 cell_image_core
 |   `-- entrypoint.py                  两类 Python 入口的参数与输出配置
 `-- tests/
     |-- test_entrypoints.py            特征选择、倍率和输出隔离测试
@@ -98,7 +100,8 @@ DATASET_NAME、TRAINING_SET_NAME 和路径。通常顺序为选焦（如需要�
 四、依赖与数据路径
 
 Suzui/DAPI_OCT4 复用相邻 Suzui/DAPI 的特征提取、QC、聚类及推理。
-Ekin 两个 Model A 流程复用 shared/dapi_model_a.py。
+Ekin 两个 Model A 流程的确定性基础计算复用 src/cell_image_core；
+shared/dapi_model_a.py 保留 Ekin OCT4 的模型和兼容入口。
 来源不同的流程不合并数据表，也不互换标记解释。
 
 Suzui 默认根目录：F:\Suzui；常规流程包括 training data、A-1 系列等。
@@ -165,6 +168,9 @@ Git 提交记录代码版本。README.txt 是结构与日常使用总入口；�
 python -m unittest discover -s tests -v
 python -m unittest discover -s Ekin_DAPI_OCT4 -p "test_*.py" -v
 python -m unittest discover -s Ekin_DAPI_YAP -p "test_*.py" -v
+
+公共内核可选安装方式：python -m pip install -e .
+迁移与真实数据回归记录：docs/architecture_migration_report.md
 
 主要依赖：Cellpose、NumPy、pandas、SciPy、scikit-image、scikit-learn、
 Matplotlib；具体流程还使用 UMAP、OpenCV、tifffile、XGBoost、SALib、SHAP。

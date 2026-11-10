@@ -35,13 +35,14 @@ population_features.csv  10 群体 × 200 列
 | `data/README.md` | 数据在哪的说明（**不存数据**） |
 | `docs/data_assets.md` | 数据资产登记 + 核数核验结论（先读这个） |
 | `docs/feature_dictionary.md` | 特征定义、单位、共线性、是否进模型 |
+| `docs/analysis_status.md` | 当前可用/停用口径与旧产物失效状态 |
 | `docs/metadata_schema.md` | 前瞻实验的孔级主表字段（未来配对用） |
 | `src/rp/paths.py` | 路径解析、运行目录、`run_info.json` |
 | `src/rp/population.py` | 细胞级 → 群体级聚合（均值/分位数/离散度/亚群熵） |
 | `scripts/00_...` | 收拢旧仓逐核表为 `cells.csv` |
 | `scripts/01_...` | 聚合到群体级特征表 |
 | `scripts/02_inventory_data_assets.py` | 盘点数据资产：文件级清单 + 单位级计数（不改数据） |
-| `scripts/03_...`–`05_...` | 早期表型总览、均匀性 / UMAP / GMM 与 Ekin 分析范式复算 |
+| `scripts/03_...`–`05_...` | 连续核形态总览、均匀性 / UMAP 与描述性效应量复算；不生成未经验证的离散表型 |
 | `scripts/06_...`–`12_...` | 最终森林图、YAP 箱线图、分割叠图与条件网格图 |
 | `scripts/verify_count_ledger.py` | 核数台账自动核验（1573 / 973 / 991 / 2821 / 868） |
 | `scripts/verify_nucleus_counts.py` | 掩膜 / 逐核表 / 旧汇总三方核数校验 |
