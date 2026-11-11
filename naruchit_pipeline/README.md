@@ -11,7 +11,7 @@
 
 所有路径都从 `config/project.json` 读，代码里不写盘符。
 
-## 当前状态（2026-11-04 首次跑通）
+## 当前状态（2026-11-11 完整复跑）
 
 ```
 旧仓 per-sample 逐核表 (10 个 CSV)
@@ -23,7 +23,17 @@
 population_features.csv  10 群体 × 200 列
 ```
 
-产物位置：`analysis_outputs\00_cells\20261104-190336_legacy\`、`analysis_outputs\01_population\20261104-190342_legacy\`。
+最新产物位置：
+
+- `analysis_outputs\02_inventory\20261111-172534_full_rerun_20261111\`
+- `analysis_outputs\00_cells\20261111-172534_full_rerun_20261111\`
+- `analysis_outputs\01_population\20261111-172535_full_rerun_20261111\`
+- `analysis_outputs\verify\20261111-172537\`
+- `analysis_outputs\03_early_phenotype\`
+- `analysis_outputs\04_uniformity_umap\`
+- `analysis_outputs\05_replicate_ekin\`
+
+本次 00–12 全流程均成功；计数台账、科学口径审计和 11 项单测全部通过。
 
 每个运行目录内都有 `run_info.json`（脚本名、参数、解释器、时间），可直接复现。
 
@@ -46,7 +56,7 @@ population_features.csv  10 群体 × 200 列
 | `scripts/06_...`–`12_...` | 最终森林图、YAP 箱线图、分割叠图与条件网格图 |
 | `scripts/verify_count_ledger.py` | 核数台账自动核验（1573 / 973 / 991 / 2821 / 868） |
 | `scripts/verify_nucleus_counts.py` | 掩膜 / 逐核表 / 旧汇总三方核数校验 |
-| `analysis_outputs/` | 每次运行一个新时间戳目录，不覆盖 |
+| `analysis_outputs/` | 00/01/02/verify 使用新时间戳目录；03–12 更新各自固定的派生图目录 |
 | `tests/` | 11 项单测，只测纯函数与路径 |
 
 ## 命令

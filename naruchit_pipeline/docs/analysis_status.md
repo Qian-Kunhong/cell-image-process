@@ -1,6 +1,26 @@
 # 当前分析状态
 
-更新时间：2026-11-10。
+更新时间：2026-11-11。
+
+## 2026-11-11 完整复跑
+
+- 数据资产盘点：1393 个文件、22 类。
+- `cells.csv`：973 核 × 23 列。
+- `population_features.csv`：10 个视野群体 × 200 列；未启用 cluster 字段。
+- 掩膜标签与逐核表均为 973，逐样本全部一致。
+- 旧汇总口径仍为 991，与有效掩膜相差 +18；该差异没有被覆盖或混用。
+- 03–12 共 12 个连续形态、YAP 描述和分割 QC 脚本全部成功。
+- 核数台账六项通过：1573 / 973 / 991 / 2821 / 868 / 1190。
+- `audit_pipeline.py` 无 FAIL、无 WARN；Naruchit 11 项单测通过。
+
+最新时间戳运行目录：
+
+```text
+analysis_outputs/02_inventory/20261111-172534_full_rerun_20261111/
+analysis_outputs/00_cells/20261111-172534_full_rerun_20261111/
+analysis_outputs/01_population/20261111-172535_full_rerun_20261111/
+analysis_outputs/verify/20261111-172537/
+```
 
 ## 可以保留的口径
 
@@ -17,9 +37,9 @@
 
 ## 旧产物状态
 
-`analysis_outputs/04_uniformity_umap/` 和 `analysis_outputs/05_replicate_ekin/` 中现有图片由旧代码生成，
-其中仍可能含 GMM、三簇、簇比例或按簇上色。重新运行净化后的 04/05/05b/05c/08/09/10/12 前，
-这些图片一律视为过期，不得用于报告或结论。
+2026-11-11 之前的 `analysis_outputs/04_uniformity_umap/` 和
+`analysis_outputs/05_replicate_ekin/` 图片可能含旧 GMM/三簇口径，仍视为失效。
+当前固定输出目录已由净化后的 03–12 脚本全部重新生成；实例颜色只用于分割 QC。
 
 重新运行后必须再执行：
 
